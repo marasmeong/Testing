@@ -54,7 +54,17 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
-          ./gradlew make makePluginsJson
+          for attempt in 1 2 3; do
+            if ./gradlew make makePluginsJson; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Gradle build failed after 3 attempts"
+              exit 1
+            fi
+            echo "Attempt $attempt failed. Retrying in 20 seconds..."
+            sleep 20
+          done
           cp **/build/*.cs3 $GITHUB_WORKSPACE/builds/
           cp build/plugins.json $GITHUB_WORKSPACE/builds/
           # Restore repo.json
