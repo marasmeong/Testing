@@ -616,7 +616,7 @@ class PusatFilm21 : MainAPI() {
 
                 try {
                     val actionHeaders = sessionHeaders() + mapOf(
-                        "Next-Action" to "60977a3bccda72e14e6fc0067caf3a61dc544b93f8",
+                        "Next-Action" to "6068478a615898ad232519eade27766c9e53796260",
                         "Accept" to "text/x-component",
                         "Content-Type" to "text/plain;charset=UTF-8",
                         "Origin" to mainUrl,
