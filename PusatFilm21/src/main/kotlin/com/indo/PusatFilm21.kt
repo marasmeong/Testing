@@ -848,6 +848,9 @@ class PusatFilm21 : MainAPI() {
                     .create()
 
                 dialog?.setOnCancelListener { finish(null) }
+                dialog?.setOnDismissListener {
+                    if (!completed) finish(null)
+                }
 
                 continuation.invokeOnCancellation {
                     activity.runOnUiThread {
@@ -861,6 +864,10 @@ class PusatFilm21 : MainAPI() {
                 }
 
                 dialog?.show()
+                dialog?.window?.setLayout(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    (activity.resources.displayMetrics.heightPixels * 0.75f).toInt()
+                )
                 dialog?.window?.clearFlags(
                     android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                 )
