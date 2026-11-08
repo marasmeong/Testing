@@ -1,5 +1,6 @@
 package com.indo
 
+import kotlinx.coroutines.sync.withLock
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import android.webkit.CookieManager
@@ -732,7 +733,7 @@ class PusatFilm21 : MainAPI() {
                         targetUrl.contains("vikingfile.com/") ||
                         targetUrl.contains("vik1ngfile.site/")
                     ) {
-                        val videoUrl = openVikingFileWebView(targetUrl)
+                        val videoUrl = verifyVikingOnce(targetUrl, refererUrl)
                         if (!videoUrl.isNullOrBlank()) {
                             val quality = when {
                                 provider.contains("1080") -> Qualities.P1080.value
@@ -765,6 +766,42 @@ class PusatFilm21 : MainAPI() {
     }
 
 
+
+
+    private data class VikingSession(
+        val videoUrl: String?,
+        val timestamp: Long
+    )
+
+    private val vikingSessions = java.util.concurrent.ConcurrentHashMap<String, VikingSession>()
+    private val vikingSessionTtl = 10 * 60 * 1000L
+
+
+    private val vikingMutex = kotlinx.coroutines.sync.Mutex()
+
+    private suspend fun verifyVikingOnce(
+        pageUrl: String,
+        filmUrl: String
+    ): String? = vikingMutex.withLock {
+        val key = filmUrl.substringBefore("?")
+        val now = System.currentTimeMillis()
+        val cached = vikingSessions[key]
+
+        if (cached != null &&
+            now - cached.timestamp < vikingSessionTtl
+        ) {
+            return@withLock cached.videoUrl
+        }
+
+        val result = openVikingFileWebView(pageUrl)
+
+        vikingSessions[key] = VikingSession(
+            videoUrl = result,
+            timestamp = System.currentTimeMillis()
+        )
+
+        result
+    }
 
     private suspend fun openVikingFileWebView(pageUrl: String): String? =
         withContext(Dispatchers.Main) {
@@ -871,6 +908,13 @@ class PusatFilm21 : MainAPI() {
                 dialog?.window?.clearFlags(
                     android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                 )
+
+                val vikingTimeoutTask = Runnable {
+                    if (!completed) {
+                        finish(null)
+                    }
+                }
+                handler.postDelayed(vikingTimeoutTask, 30_000L)
 
                 webView.loadUrl(pageUrl)
                 handler.postDelayed(checkVideo, 1000)
