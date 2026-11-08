@@ -811,7 +811,7 @@ class PusatFilm21 : MainAPI() {
                                 var link = document.getElementById('download-link');
                                 var url = (video && video.src) ||
                                           (link && link.href) || '';
-                                return /^https?:\\/\\//.test(url) ? url : '';
+                                return url.startsWith('http') ? url : '';
                             })();
                             """.trimIndent()
                         ) { result ->
