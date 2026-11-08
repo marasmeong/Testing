@@ -785,7 +785,7 @@ class PusatFilm21 : MainAPI() {
         pageUrl: String,
         filmUrl: String
     ): String? = vikingMutex.withLock {
-        val key = filmUrl.substringBefore("?")
+        val key = pageUrl.substringBefore("?")
         val now = System.currentTimeMillis()
         val cached = vikingSessions[key]
 
