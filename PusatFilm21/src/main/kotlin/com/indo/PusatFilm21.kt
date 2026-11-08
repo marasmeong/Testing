@@ -705,7 +705,9 @@ class PusatFilm21 : MainAPI() {
             val providers = kp.select("button[data-p]").map { it.attr("data-p") }.filter { it.isNotBlank() }
                 .ifEmpty { listOf("hydrax", "gdriveplayer") }
 
-            for (provider in providers) {
+            for (provider in providers.sortedBy {
+                if (it.startsWith("vikingfile", ignoreCase = true)) 1 else 0
+            }) {
                 try {
                     val encodedToken = URLEncoder.encode(token, "UTF-8")
                     val sourceUrl = "https://kotakajaib.me/embed/$share/source/$provider?t=$encodedToken"
