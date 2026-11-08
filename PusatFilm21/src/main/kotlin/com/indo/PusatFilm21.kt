@@ -3,6 +3,14 @@ package com.indo
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import android.webkit.CookieManager
+import android.app.AlertDialog
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import com.lagradost.cloudstream3.CommonActivity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.nicehttp.JsonAsString
@@ -720,6 +728,32 @@ class PusatFilm21 : MainAPI() {
                         extractAbyss(targetUrl, embedUrl, subtitleCallback, callback)
                     } else if (Regex("""https?://(?:www\.)?(?:streamtape\.[a-z]+|streamta\.pe|strtape\.[a-z]+|streamtape\.site)/""", RegexOption.IGNORE_CASE).containsMatchIn(targetUrl)) {
                         extractStreamTape(targetUrl, provider, callback)
+                    } else if (
+                        targetUrl.contains("vikingfile.com/") ||
+                        targetUrl.contains("vik1ngfile.site/")
+                    ) {
+                        val videoUrl = openVikingFileWebView(targetUrl)
+                        if (!videoUrl.isNullOrBlank()) {
+                            val quality = when {
+                                provider.contains("1080") -> Qualities.P1080.value
+                                provider.contains("720") -> Qualities.P720.value
+                                provider.contains("480") -> Qualities.P480.value
+                                else -> Qualities.Unknown.value
+                            }
+
+                            callback(
+                                newExtractorLink(
+                                    "VikingFile",
+                                    "VikingFile $provider",
+                                    videoUrl,
+                                    type = ExtractorLinkType.VIDEO
+                                ) {
+                                    this.quality = quality
+                                    this.referer = targetUrl
+                                    this.headers = mapOf("Referer" to targetUrl)
+                                }
+                            )
+                        }
                     } else {
                         loadExtractor(targetUrl, embedUrl, subtitleCallback, callback)
                     }
@@ -730,6 +764,111 @@ class PusatFilm21 : MainAPI() {
         }
     }
 
+
+
+    private suspend fun openVikingFileWebView(pageUrl: String): String? =
+        withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { continuation ->
+                val activity = CommonActivity.activity
+
+                if (activity == null || activity.isFinishing) {
+                    continuation.resume(null)
+                    return@suspendCancellableCoroutine
+                }
+
+                val webView = WebView(activity).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                }
+
+                CookieManager.getInstance()
+                    .setAcceptThirdPartyCookies(webView, true)
+
+                var dialog: AlertDialog? = null
+                var completed = false
+
+                fun finish(url: String?) {
+                    if (completed) return
+                    completed = true
+                    CookieManager.getInstance().flush()
+                    dialog?.dismiss()
+                    webView.destroy()
+                    if (continuation.isActive) continuation.resume(url)
+                }
+
+                val handler = android.os.Handler(
+                    android.os.Looper.getMainLooper()
+                )
+
+                val checkVideo = object : Runnable {
+                    override fun run() {
+                        if (completed) return
+
+                        webView.evaluateJavascript(
+                            """
+                            (function() {
+                                var video = document.querySelector('video');
+                                var link = document.getElementById('download-link');
+                                var url = (video && video.src) ||
+                                          (link && link.href) || '';
+                                return /^https?:\\/\\//.test(url) ? url : '';
+                            })();
+                            """.trimIndent()
+                        ) { result ->
+                            val url = runCatching {
+                                org.json.JSONTokener(result).nextValue() as? String
+                            }.getOrNull()
+
+                            if (!url.isNullOrBlank() &&
+                                url.startsWith("http")) {
+                                finish(url)
+                            }
+                        }
+
+                        handler.postDelayed(this, 1000)
+                    }
+                }
+
+                webView.webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(
+                        view: WebView?,
+                        url: String?
+                    ) {
+                        super.onPageFinished(view, url)
+                    }
+                }
+
+                dialog = AlertDialog.Builder(activity)
+                    .setTitle("VikingFile - Verifikasi Cloudflare")
+                    .setMessage("Selesaikan verifikasi jika diminta.")
+                    .setView(webView)
+                    .setNegativeButton("Batal") { _, _ ->
+                        finish(null)
+                    }
+                    .create()
+
+                dialog?.setOnCancelListener { finish(null) }
+
+                continuation.invokeOnCancellation {
+                    activity.runOnUiThread {
+                        if (!completed) {
+                            completed = true
+                            handler.removeCallbacks(checkVideo)
+                            dialog?.dismiss()
+                            webView.destroy()
+                        }
+                    }
+                }
+
+                dialog?.show()
+                dialog?.window?.clearFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+                )
+
+                webView.loadUrl(pageUrl)
+                handler.postDelayed(checkVideo, 1000)
+            }
+        }
 
     private suspend fun extractStreamTape(
         embedUrl: String,
