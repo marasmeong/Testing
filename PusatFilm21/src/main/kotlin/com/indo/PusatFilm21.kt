@@ -868,7 +868,32 @@ class PusatFilm21 : MainAPI() {
                     }
                 }
 
+                webView.settings.setSupportMultipleWindows(false)
+                webView.settings.javaScriptCanOpenWindowsAutomatically = false
+
                 webView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): Boolean {
+                        if (request == null || !request.isForMainFrame) return false
+
+                        val uri = request.url
+                        val host = uri.host?.lowercase() ?: return true
+                        val scheme = uri.scheme?.lowercase()
+
+                        if (scheme != "https" && scheme != "http") return true
+
+                        val allowed =
+                            host == "vikingfile.com" ||
+                            host.endsWith(".vikingfile.com") ||
+                            host == "vik1ngfile.site" ||
+                            host.endsWith(".vik1ngfile.site") ||
+                            host == "challenges.cloudflare.com"
+
+                        return !allowed
+                    }
+
                     override fun onPageFinished(
                         view: WebView?,
                         url: String?
@@ -881,6 +906,7 @@ class PusatFilm21 : MainAPI() {
                     .setTitle("VikingFile - Verifikasi Cloudflare")
                     .setMessage("Selesaikan verifikasi jika diminta.")
                     .setView(webView)
+                    .setNeutralButton("Kembali", null)
                     .setNegativeButton("Batal") { _, _ ->
                         finish(null)
                     }
@@ -903,6 +929,14 @@ class PusatFilm21 : MainAPI() {
                 }
 
                 dialog?.show()
+                dialog?.getButton(AlertDialog.BUTTON_NEUTRAL)?.apply {
+                    setTextColor(android.graphics.Color.WHITE)
+                    setOnClickListener {
+                        if (webView.canGoBack()) webView.goBack()
+                    }
+                }
+                dialog?.getButton(AlertDialog.BUTTON_NEGATIVE)
+                    ?.setTextColor(android.graphics.Color.WHITE)
                 dialog?.window?.setLayout(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     (activity.resources.displayMetrics.heightPixels * 0.75f).toInt()
