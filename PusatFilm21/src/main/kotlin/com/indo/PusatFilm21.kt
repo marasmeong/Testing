@@ -944,8 +944,7 @@ class PusatFilm21 : MainAPI() {
                     webView,
                     android.widget.LinearLayout.LayoutParams(
                         android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        0,
-                        1f
+                        (activity.resources.displayMetrics.heightPixels * 0.60f).toInt()
                     )
                 )
 
