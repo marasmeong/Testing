@@ -5,7 +5,6 @@ include(
     "Otakudesu",
     "Sokuja",
     "LK21",
-    "BlurayUFR",
     "LayarAsia",
     "AnimeXin",
     )
