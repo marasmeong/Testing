@@ -718,7 +718,7 @@ class PusatFilm21 : MainAPI() {
 
                     if (targetUrl.contains("playhydrax.com") || targetUrl.contains("abyssplayer.com")) {
                         extractAbyss(targetUrl, embedUrl, subtitleCallback, callback)
-                    } else if (targetUrl.contains("streamtape.com/") || targetUrl.contains("streamtape.to/")) {
+                    } else if (Regex("""https?://(?:www\.)?(?:streamtape\.[a-z]+|streamta\.pe|strtape\.[a-z]+|streamtape\.site)/""", RegexOption.IGNORE_CASE).containsMatchIn(targetUrl)) {
                         extractStreamTape(targetUrl, provider, callback)
                     } else {
                         loadExtractor(targetUrl, embedUrl, subtitleCallback, callback)
