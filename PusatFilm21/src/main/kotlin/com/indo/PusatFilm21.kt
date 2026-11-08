@@ -902,14 +902,56 @@ class PusatFilm21 : MainAPI() {
                     }
                 }
 
+                val layout = android.widget.LinearLayout(activity).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                }
+
+                val toolbar = android.widget.LinearLayout(activity).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    setPadding(12, 8, 12, 8)
+                }
+
+                val backButton = android.widget.Button(activity).apply {
+                    text = "← Kembali"
+                    setTextColor(android.graphics.Color.WHITE)
+                    setOnClickListener {
+                        if (webView.canGoBack()) {
+                            webView.goBack()
+                        } else {
+                            finish(null)
+                        }
+                    }
+                }
+
+                val cancelButton = android.widget.Button(activity).apply {
+                    text = "Batal"
+                    setTextColor(android.graphics.Color.WHITE)
+                    setOnClickListener { finish(null) }
+                }
+
+                toolbar.addView(
+                    backButton,
+                    android.widget.LinearLayout.LayoutParams(
+                        0,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    )
+                )
+                toolbar.addView(cancelButton)
+
+                layout.addView(toolbar)
+                layout.addView(
+                    webView,
+                    android.widget.LinearLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        0,
+                        1f
+                    )
+                )
+
                 dialog = AlertDialog.Builder(activity)
                     .setTitle("VikingFile - Verifikasi Cloudflare")
-                    .setMessage("Selesaikan verifikasi jika diminta.")
-                    .setView(webView)
-                    .setNeutralButton("Kembali", null)
-                    .setNegativeButton("Batal") { _, _ ->
-                        finish(null)
-                    }
+                    .setView(layout)
                     .create()
 
                 dialog?.setOnCancelListener { finish(null) }
@@ -929,14 +971,7 @@ class PusatFilm21 : MainAPI() {
                 }
 
                 dialog?.show()
-                dialog?.getButton(AlertDialog.BUTTON_NEUTRAL)?.apply {
-                    setTextColor(android.graphics.Color.WHITE)
-                    setOnClickListener {
-                        if (webView.canGoBack()) webView.goBack()
-                    }
-                }
-                dialog?.getButton(AlertDialog.BUTTON_NEGATIVE)
-                    ?.setTextColor(android.graphics.Color.WHITE)
+
                 dialog?.window?.setLayout(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     (activity.resources.displayMetrics.heightPixels * 0.75f).toInt()
