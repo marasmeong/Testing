@@ -50,6 +50,11 @@ jobs:
         with:
           packages: 'platform-tools'
 
+      - name: Restore Cloudstream JAR cache
+        run: |
+          mkdir -p "$HOME/.gradle/caches/cloudstream/cloudstream"
+          cp "$GITHUB_WORKSPACE/src/.github/dependencies/cloudstream.jar" "$HOME/.gradle/caches/cloudstream/cloudstream/cloudstream.jar"
+
       - name: Build Plugins
         run: |
           cd $GITHUB_WORKSPACE/src
