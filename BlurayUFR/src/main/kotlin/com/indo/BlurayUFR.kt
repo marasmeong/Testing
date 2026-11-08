@@ -348,8 +348,7 @@ class BlurayUFR : MainAPI() {
                 val link = newExtractorLink(
                     "Abyss",
                     "Abyss $type",
-                    finalUrl,
-                    type = ExtractorLinkType.VIDEO
+                    finalUrl
                 ) {
                     this.quality = q
                     this.referer = "https://abyssplayer.com/"
@@ -369,6 +368,8 @@ class BlurayUFR : MainAPI() {
         }
     }
 
+
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -376,43 +377,97 @@ class BlurayUFR : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val doc = app.get(data, headers = headers).document
+        val seen = mutableSetOf<String>()
+        var foundAny = false
 
-        val iframeUrls = mutableSetOf<String>()
+        val selector =
+            ".gmr-embed-responsive iframe, " +
+            "iframe[src*='abyss'], " +
+            "iframe[src*='hydrax'], " +
+            "iframe[data-src*='abyss'], " +
+            "iframe[data-src*='hydrax']"
 
-        doc.select(".gmr-embed-responsive iframe, iframe[src*='abyss'], iframe[src*='hydrax']").forEach { iframe ->
-            val src = iframe.attr("src").ifBlank { iframe.attr("data-src") }
-            fixUrlNull(src)?.let { iframeUrls.add(it) }
-        }
+        suspend fun processIframe(iframe: Element) {
+            val src = iframe.attr("src").trim()
+            val lazySrc = iframe.attr("data-src").trim()
 
-        val tabLinks = doc.select(".muvipro-player-tabs a[href*='player=']")
-            .mapNotNull { fixUrlNull(it.attr("href")) }
-            .distinct()
+            val rawUrl = if (
+                src.isBlank() ||
+                src.equals("about:blank", true) ||
+                src == "#" ||
+                src.startsWith("javascript:", true)
+            ) {
+                lazySrc
+            } else {
+                src
+            }
 
-        for (tabUrl in tabLinks) {
-            if (tabUrl == data) continue
+            if (rawUrl.isBlank()) return
+
+            val embedUrl = fixUrlNull(rawUrl) ?: return
+            if (!seen.add(embedUrl)) return
+
             try {
-                val tabDoc = app.get(tabUrl, headers = headers).document
-                tabDoc.select(".gmr-embed-responsive iframe, iframe[src*='abyss'], iframe[src*='hydrax']").forEach { iframe ->
-                    val src = iframe.attr("src").ifBlank { iframe.attr("data-src") }
-                    fixUrlNull(src)?.let { iframeUrls.add(it) }
+                val isAbyss = listOf(
+                    "abyssplayer",
+                    "hydrax",
+                    "abysscdn"
+                ).any {
+                    embedUrl.contains(it, ignoreCase = true)
                 }
+
+                val success = if (isAbyss) {
+                    extractAbyss(
+                        embedUrl,
+                        data,
+                        subtitleCallback,
+                        callback
+                    )
+                } else {
+                    loadExtractor(
+                        embedUrl,
+                        data,
+                        subtitleCallback,
+                        callback
+                    )
+                }
+
+                if (success) foundAny = true
             } catch (_: Exception) {
+                // Server lain tetap diproses.
             }
         }
 
-        var foundAny = false
-        for (embedUrl in iframeUrls) {
-            if (embedUrl.contains("abyssplayer") || embedUrl.contains("hydrax") || embedUrl.contains("abysscdn")) {
-                if (extractAbyss(embedUrl, data, subtitleCallback, callback)) {
-                    foundAny = true
+        // Prioritaskan iframe dari halaman utama.
+        for (iframe in doc.select(selector)) {
+            processIframe(iframe)
+        }
+
+        // Periksa tab server tambahan.
+        val tabLinks = doc.select(
+            ".muvipro-player-tabs a[href*='player=']"
+        ).mapNotNull {
+            fixUrlNull(it.attr("href"))
+        }.distinct()
+
+        for (tabUrl in tabLinks) {
+            if (tabUrl == data) continue
+
+            try {
+                val tabDoc = app.get(
+                    tabUrl,
+                    headers = headers
+                ).document
+
+                for (iframe in tabDoc.select(selector)) {
+                    processIframe(iframe)
                 }
-            } else {
-                if (loadExtractor(embedUrl, data, subtitleCallback, callback)) {
-                    foundAny = true
-                }
+            } catch (_: Exception) {
+                // Lanjutkan ke tab berikutnya.
             }
         }
 
         return foundAny
     }
+
 }
