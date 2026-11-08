@@ -99,7 +99,7 @@ class Anichin : MainAPI() {
             img.attr("data-src").ifBlank { null } ?: img.attr("src").ifBlank { null }
         }?.let { fixUrl(it) } ?: doc.selectFirst("meta[property=og:image]")?.attr("content")?.let { fixUrl(it) }
 
-        val synopsis = doc.select(".bixbox.synp .entry-content p").text().trim().ifBlank { null }
+        val synopsis = doc.selectFirst(".bixbox.synp .entry-content, .single-info .info-content .desc.mindes")?.text()?.trim()?.ifBlank { null }
         val tags = doc.select(".genxed a, a[href*=/genres/]").mapNotNull { it.text().trim().ifBlank { null } }.distinct()
 
         val statusText = doc.selectFirst(".spe span:contains(Status)")?.text()?.trim()
