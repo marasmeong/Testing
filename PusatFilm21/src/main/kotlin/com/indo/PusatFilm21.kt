@@ -889,7 +889,7 @@ class PusatFilm21 : MainAPI() {
             ).text
 
             val pattern = Regex(
-                """getElementById\\(['"]botlink['"]\\)\\.innerHTML\\s*=\\s*['"]([^'"]+)['"]\\s*\\+\\s*\\(['"]([^'"]+)['"]\\)\\.substring\\((\\d+)\\)"""
+                """getElementById\(['"]botlink['"]\)\.innerHTML\s*=\s*['"]([^'"]+)['"]\s*\+\s*\(['"]([^'"]+)['"]\)\.substring\((\d+)\)"""
             )
             val match = pattern.findAll(html).lastOrNull() ?: return false
             val prefix = match.groupValues[1]
