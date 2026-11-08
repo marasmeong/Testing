@@ -718,6 +718,8 @@ class PusatFilm21 : MainAPI() {
 
                     if (targetUrl.contains("playhydrax.com") || targetUrl.contains("abyssplayer.com")) {
                         extractAbyss(targetUrl, embedUrl, subtitleCallback, callback)
+                    } else if (targetUrl.contains("streamtape.com/") || targetUrl.contains("streamtape.to/")) {
+                        extractStreamTape(targetUrl, provider, callback)
                     } else {
                         loadExtractor(targetUrl, embedUrl, subtitleCallback, callback)
                     }
@@ -725,6 +727,59 @@ class PusatFilm21 : MainAPI() {
                 }
             }
         } catch (_: Exception) {
+        }
+    }
+
+
+    private suspend fun extractStreamTape(
+        embedUrl: String,
+        provider: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        return try {
+            val html = app.get(
+                embedUrl,
+                headers = mapOf("User-Agent" to "Mozilla/5.0")
+            ).text
+
+            val pattern = Regex(
+                """getElementById\\(['"]botlink['"]\\)\\.innerHTML\\s*=\\s*['"]([^'"]+)['"]\\s*\\+\\s*\\(['"]([^'"]+)['"]\\)\\.substring\\((\\d+)\\)"""
+            )
+            val match = pattern.findAll(html).lastOrNull() ?: return false
+            val prefix = match.groupValues[1]
+            val encoded = match.groupValues[2]
+            val cut = match.groupValues[3].toInt()
+            if (cut > encoded.length) return false
+
+            val rawUrl = prefix + encoded.substring(cut) + "&stream=1"
+            val videoUrl = when {
+                rawUrl.startsWith("//") -> "https:$rawUrl"
+                rawUrl.startsWith("https://") -> rawUrl
+                else -> return false
+            }
+
+            val quality = when {
+                provider.contains("1080") -> Qualities.P1080.value
+                provider.contains("720") -> Qualities.P720.value
+                provider.contains("480") -> Qualities.P480.value
+                else -> Qualities.Unknown.value
+            }
+
+            callback(
+                newExtractorLink(
+                    "StreamTape",
+                    "StreamTape $provider",
+                    videoUrl,
+                    type = ExtractorLinkType.VIDEO
+                ) {
+                    this.quality = quality
+                    this.referer = embedUrl
+                    this.headers = mapOf("Referer" to embedUrl)
+                }
+            )
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
