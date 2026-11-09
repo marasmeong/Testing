@@ -572,9 +572,13 @@ class PusatFilm21 : MainAPI() {
             ?.ifBlank { null }
             ?: doc.selectFirst("img[alt]")?.attr("src")
 
-        val plot = doc.selectFirst("meta[property=og:description]")
-            ?.attr("content")
-            ?.ifBlank { null }
+        val plot = doc.selectFirst("p.text-text-secondary")
+            ?.text()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: doc.selectFirst("meta[property=og:description]")
+                ?.attr("content")
+                ?.ifBlank { null }
 
         val year = Regex("""(?:19|20)\d{2}""")
             .find(url.substringAfterLast("/"))
