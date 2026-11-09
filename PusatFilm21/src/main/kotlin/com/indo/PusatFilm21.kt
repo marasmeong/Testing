@@ -105,6 +105,31 @@ class PusatFilm21 : MainAPI() {
         *homeCategories.map { mainUrl to it }.toTypedArray()
     )
 
+
+    private fun applyPosterMetadata(
+        element: org.jsoup.nodes.Element,
+        response: SearchResponse
+    ) {
+        val rating = element.select("span")
+            .firstOrNull { it.text().trim().startsWith("★") }
+            ?.text()
+            ?.replace("★", "")
+            ?.trim()
+            ?.toDoubleOrNull()
+
+        val quality = element.select("span")
+            .firstOrNull {
+                it.className().contains("border-quality-")
+            }
+            ?.text()
+            ?.trim()
+
+        rating?.let { response.score = Score.from10(it) }
+        if (!quality.isNullOrBlank()) {
+            response.addQuality(quality)
+        }
+    }
+
     private fun categoryItems(
         doc: org.jsoup.nodes.Document,
         category: String
@@ -153,7 +178,7 @@ class PusatFilm21 : MainAPI() {
 
             newMovieSearchResponse(title, "$mainUrl$href", type) {
                 this.posterUrl = poster.ifBlank { null }
-            }
+            }.also { applyPosterMetadata(a, it) }
         }
     }
 
@@ -421,7 +446,7 @@ class PusatFilm21 : MainAPI() {
                 type
             ) {
                 this.posterUrl = poster?.ifBlank { null }
-            }
+            }.also { applyPosterMetadata(a, it) }
         }.distinctBy { it.url }
 
         val hasNext = doc.select("a[href]").any { a ->
