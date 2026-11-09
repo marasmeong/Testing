@@ -289,16 +289,35 @@ class IdlixProvider : MainAPI() {
 
         kotlinx.coroutines.delay(waitMs)
 
-        val claim = JSONObject(
-            app.post(
-                "$mainUrl/api/watch/session/claim",
-                headers = headers + ("Content-Type" to "application/json"),
-                requestBody = JSONObject().put("gateToken", info.str("gateToken")).toString().toRequestBody("application/json".toMediaType())
-            ).text
-        )
 
-        val redeemUrl = claim.str("redeemUrl")
-        val claimToken = claim.str("claim")
+        var claim: JSONObject? = null
+
+        for (attempt in 1..12) {
+            val response = JSONObject(
+                app.post(
+                    "$mainUrl/api/watch/session/claim",
+                    headers = headers + ("Content-Type" to "application/json"),
+                    requestBody = JSONObject()
+                        .put("gateToken", info.str("gateToken"))
+                        .toString()
+                        .toRequestBody("application/json".toMediaType())
+                ).text
+            )
+
+            if (response.str("kind") == "pentos") {
+                claim = response
+                break
+            }
+
+            val remaining = response.optLong("remainingMs", 250L)
+            val delayMs = (remaining + 125L).coerceIn(250L, 5000L)
+            kotlinx.coroutines.delay(delayMs)
+        }
+
+        val readyClaim = claim ?: return false
+
+        val redeemUrl = readyClaim.str("redeemUrl")
+        val claimToken = readyClaim.str("claim")
 
         if (redeemUrl.isBlank() || claimToken.isBlank()) return false
 
@@ -322,7 +341,7 @@ class IdlixProvider : MainAPI() {
                 "Idlix",
                 "Idlix HLS",
                 videoUrl,
-                INFER_TYPE
+                ExtractorLinkType.M3U8
             ) {
                 referer = mainUrl
             }
