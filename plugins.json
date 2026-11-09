@@ -308,5 +308,24 @@
     "internalName": "Kuronime",
     "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Kuronime.cs3",
     "name": "Kuronime"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=https://sweetiepieparenting.com&sz=%size%",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "fileSize": 0,
+    "status": 1,
+    "language": "id",
+    "authors": [
+      "ExtremeBoy"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "version": 3,
+    "internalName": "Idlix",
+    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Idlix.cs3",
+    "name": "Idlix"
   }
 ]
