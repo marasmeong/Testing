@@ -3,6 +3,8 @@ package com.idlix
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.json.JSONObject
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class IdlixProvider : MainAPI() {
     override var mainUrl = "https://z2.idlixku.com"
@@ -291,7 +293,7 @@ class IdlixProvider : MainAPI() {
             app.post(
                 "$mainUrl/api/watch/session/claim",
                 headers = headers + ("Content-Type" to "application/json"),
-                data = mapOf("gateToken" to info.str("gateToken"))
+                requestBody = JSONObject().put("gateToken", info.str("gateToken")).toString().toRequestBody("application/json".toMediaType())
             ).text
         )
 
@@ -304,10 +306,11 @@ class IdlixProvider : MainAPI() {
             app.post(
                 redeemUrl,
                 headers = headers + ("Content-Type" to "application/json"),
-                data = mapOf(
-                    "claim" to claimToken,
-                    "mode" to "browser"
-                )
+                requestBody = JSONObject()
+                    .put("claim", claimToken)
+                    .put("mode", "browser")
+                    .toString()
+                    .toRequestBody("application/json".toMediaType())
             ).text
         )
 
