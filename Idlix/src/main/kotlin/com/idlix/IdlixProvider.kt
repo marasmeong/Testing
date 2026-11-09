@@ -14,6 +14,8 @@ class IdlixProvider : MainAPI() {
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
+    private var savedDidCookie: String? = null
+
     private val ua = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
 
     override val mainPage = mainPageOf(
@@ -278,12 +280,18 @@ class IdlixProvider : MainAPI() {
             headers = headers
         )
 
-        val didCookie = infoResponse.headers.values("Set-Cookie")
-            .firstOrNull { it.startsWith("did=") }
+        val newDidCookie = infoResponse.headers.values("Set-Cookie")
+            .firstOrNull { it.trim().startsWith("did=") }
+            ?.trim()
             ?.substringBefore(";")
-            ?: return false
 
-        val sessionHeaders = headers + ("Cookie" to didCookie)
+        if (newDidCookie != null) {
+            savedDidCookie = newDidCookie
+        }
+
+        val sessionHeaders = savedDidCookie?.let {
+            headers + ("Cookie" to it)
+        } ?: headers
 
         val info = JSONObject(infoResponse.text)
 
