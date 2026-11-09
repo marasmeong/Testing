@@ -339,7 +339,21 @@ class PusatFilm21 : MainAPI() {
                     ""
                 }
 
-                newMovieSearchResponse(
+                if (!isMovie) {
+                    newTvSeriesSearchResponse(
+                        title,
+                        "$mainUrl/$typeName/$slug",
+                        TvType.TvSeries
+                    ) {
+                        this.posterUrl = poster.ifBlank { null }
+                        this.episodes = item.optInt("latestEpisode", 0)
+                            .takeIf { it > 0 }
+                        item.optString("voteAverage")
+                            .toDoubleOrNull()
+                            ?.takeIf { it > 0.0 }
+                            ?.let { this.score = Score.from10(it) }
+                    }
+                } else newMovieSearchResponse(
                     title,
                     "$mainUrl/$typeName/$slug",
                     type
