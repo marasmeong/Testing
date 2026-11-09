@@ -323,7 +323,7 @@
       "Movie",
       "TvSeries"
     ],
-    "version": 4,
+    "version": 5,
     "internalName": "Idlix",
     "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Idlix.cs3",
     "name": "Idlix"

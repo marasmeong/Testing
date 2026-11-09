@@ -290,7 +290,7 @@ class Idlix : MainAPI() {
             emptyMap()
         }
         try {
-            val pageResp = app.get(pageUrl, interceptor = cfKiller)
+            val pageResp = app.get(pageUrl, headers = cookieHeader, interceptor = cfKiller)
             val setCookie = pageResp.headers["set-cookie"].orEmpty()
             val did = Regex("""\bdid=([^;]+)""").find(setCookie)?.groupValues?.getOrNull(1)
             if (!did.isNullOrBlank()) {
