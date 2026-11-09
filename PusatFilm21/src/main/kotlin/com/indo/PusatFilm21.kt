@@ -825,19 +825,23 @@ class PusatFilm21 : MainAPI() {
 
                 var dialog: AlertDialog? = null
                 var completed = false
+                var mainPageLoaded = false
+                var pageFinishedAt = 0L
+
+                val handler = android.os.Handler(
+                    android.os.Looper.getMainLooper()
+                )
+                val scheduledTasks = mutableListOf<Runnable>()
 
                 fun finish(url: String?) {
                     if (completed) return
                     completed = true
+                    scheduledTasks.forEach { handler.removeCallbacks(it) }
                     CookieManager.getInstance().flush()
                     dialog?.dismiss()
                     webView.destroy()
                     if (continuation.isActive) continuation.resume(url)
                 }
-
-                val handler = android.os.Handler(
-                    android.os.Looper.getMainLooper()
-                )
 
                 val checkVideo = object : Runnable {
                     override fun run() {
@@ -864,14 +868,28 @@ class PusatFilm21 : MainAPI() {
                             }
                         }
 
-                        handler.postDelayed(this, 1000)
+                        if (!completed) {
+                            handler.postDelayed(this, 1000)
+                        }
                     }
                 }
+                scheduledTasks.add(checkVideo)
 
                 webView.settings.setSupportMultipleWindows(false)
                 webView.settings.javaScriptCanOpenWindowsAutomatically = false
 
                 webView.webViewClient = object : WebViewClient() {
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?,
+                        error: android.webkit.WebResourceError?
+                    ) {
+                        super.onReceivedError(view, request, error)
+                        if (!completed && request?.isForMainFrame == true) {
+                            finish(null)
+                        }
+                    }
+
                     override fun shouldOverrideUrlLoading(
                         view: WebView?,
                         request: android.webkit.WebResourceRequest?
@@ -899,6 +917,12 @@ class PusatFilm21 : MainAPI() {
                         url: String?
                     ) {
                         super.onPageFinished(view, url)
+                        if (!completed && !mainPageLoaded &&
+                            url != null && url.startsWith("http")) {
+                            mainPageLoaded = true
+                            pageFinishedAt =
+                                android.os.SystemClock.elapsedRealtime()
+                        }
                     }
                 }
 
@@ -962,7 +986,10 @@ class PusatFilm21 : MainAPI() {
                     activity.runOnUiThread {
                         if (!completed) {
                             completed = true
-                            handler.removeCallbacks(checkVideo)
+                            scheduledTasks.forEach {
+                                handler.removeCallbacks(it)
+                            }
+                            CookieManager.getInstance().flush()
                             dialog?.dismiss()
                             webView.destroy()
                         }
@@ -979,15 +1006,89 @@ class PusatFilm21 : MainAPI() {
                     android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                 )
 
-                val vikingTimeoutTask = Runnable {
-                    if (!completed) {
-                        finish(null)
+                val blankTimeoutTask = object : Runnable {
+                    override fun run() {
+                        if (completed) return
+
+                        webView.evaluateJavascript(
+                            """
+                            (function() {
+                                var text = (document.body?.innerText || '').trim();
+                                var html = document.body?.innerHTML || '';
+                                var captcha = !!document.querySelector(
+                                    'iframe[src*="challenges.cloudflare.com"],' +
+                                    '.cf-turnstile, #challenge-form, ' +
+                                    '[class*="cf-challenge"]'
+                                ) || /verify you are human|checking your browser|just a moment/i.test(
+                                    text + ' ' + document.title
+                                );
+                                return JSON.stringify({
+                                    blank: text.length === 0 && html.length < 150,
+                                    captcha: captcha
+                                });
+                            })();
+                            """.trimIndent()
+                        ) { result ->
+                            if (completed) return@evaluateJavascript
+
+                            val status = runCatching {
+                                val raw = org.json.JSONTokener(result)
+                                    .nextValue() as String
+                                org.json.JSONObject(raw)
+                            }.getOrNull()
+
+                            val blank = status?.optBoolean("blank") == true
+                            val captcha = status?.optBoolean("captcha") == true
+
+                            val elapsed =
+                                android.os.SystemClock.elapsedRealtime() -
+                                pageFinishedAt
+
+                            if (mainPageLoaded && blank && !captcha &&
+                                elapsed >= 20_000L) {
+                                finish(null)
+                            }
+                        }
+
+                        if (!completed) {
+                            handler.postDelayed(this, 1000L)
+                        }
                     }
                 }
-                handler.postDelayed(vikingTimeoutTask, 30_000L)
+                scheduledTasks.add(blankTimeoutTask)
+                handler.postDelayed(blankTimeoutTask, 1000L)
+
+                val initialLoadTimeout = Runnable {
+                    if (!completed && !mainPageLoaded) {
+                        webView.evaluateJavascript(
+                            """
+                            (function() {
+                                var body = document.body;
+                                var text = body ? (body.innerText || '').trim() : '';
+                                var html = body ? (body.innerHTML || '') : '';
+                                var captcha = !!document.querySelector(
+                                    'iframe[src*="challenges.cloudflare.com"],' +
+                                    '.cf-turnstile, #challenge-form, ' +
+                                    '[class*="cf-challenge"]'
+                                ) || /verify you are human|checking your browser|just a moment/i.test(
+                                    text + ' ' + document.title
+                                );
+                                return captcha || text.length > 0 || html.length >= 150;
+                            })();
+                            """.trimIndent()
+                        ) { result ->
+                            if (!completed && !mainPageLoaded &&
+                                result != "true") {
+                                finish(null)
+                            }
+                        }
+                    }
+                }
+                scheduledTasks.add(initialLoadTimeout)
 
                 webView.loadUrl(pageUrl)
                 handler.postDelayed(checkVideo, 1000)
+                handler.postDelayed(initialLoadTimeout, 20_000L)
             }
         }
 
