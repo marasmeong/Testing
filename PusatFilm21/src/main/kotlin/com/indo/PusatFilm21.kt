@@ -984,7 +984,7 @@ class PusatFilm21 : MainAPI() {
                         finish(null)
                     }
                 }
-                handler.postDelayed(vikingTimeoutTask, 30_000L)
+                handler.postDelayed(vikingTimeoutTask, 15_000L)
 
                 webView.loadUrl(pageUrl)
                 handler.postDelayed(checkVideo, 1000)
