@@ -208,7 +208,7 @@ class IdlixProvider : MainAPI() {
                 title,
                 "$mainUrl/movie/$slug",
                 TvType.Movie,
-                "movie:" + data.str("id")
+                "$mainUrl/movie/$slug"
             ) {
                 posterUrl = image
                 backgroundPosterUrl = background
@@ -241,7 +241,7 @@ class IdlixProvider : MainAPI() {
                     if (episodeNumber < 1) continue
 
                     episodes.add(
-                        newEpisode("episode:" + ep.str("id")) {
+                        newEpisode("$mainUrl/series/$slug/season/$seasonNumber/episode/$episodeNumber") {
                             name = ep.str("name")
                             season = seasonNumber
                             episode = episodeNumber
