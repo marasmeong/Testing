@@ -588,6 +588,43 @@ class PusatFilm21 : MainAPI() {
             .find(url.substringAfterLast("/"))
             ?.value?.toIntOrNull()
 
+        val genres = doc.select("a[href^='/genre/']")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        fun metadataValue(label: String): String? {
+            val element = doc.select("span").firstOrNull {
+                it.childrenSize() == 0 &&
+                it.text().trim().equals(label, ignoreCase = true)
+            } ?: return null
+
+            return element.parent()
+                ?.children()
+                ?.firstOrNull { it != element }
+                ?.text()
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }
+
+        val rating = metadataValue("rating")
+            ?.replace("★", "")
+            ?.trim()
+            ?.toDoubleOrNull()
+
+        val duration = metadataValue("durasi")
+        val quality = metadataValue("kualitas")
+        val age = metadataValue("usia")
+
+        val tags = (
+            genres +
+            listOfNotNull(
+                duration?.let { "Durasi: $it" },
+                quality?.let { "Kualitas: $it" },
+                age?.let { "Usia: $it" }
+            )
+        ).distinct()
+
         if (url.contains("/series/")) {
             val episodes = parseSeriesEpisodes(doc, url)
             return newTvSeriesLoadResponse(
@@ -596,6 +633,8 @@ class PusatFilm21 : MainAPI() {
                 this.posterUrl = poster
                 this.plot = plot
                 this.year = year
+                this.tags = tags
+                rating?.let { this.score = Score.from10(it) }
             }
         }
 
@@ -603,6 +642,8 @@ class PusatFilm21 : MainAPI() {
             this.posterUrl = poster
             this.plot = plot
             this.year = year
+            this.tags = tags
+            rating?.let { this.score = Score.from10(it) }
         }
     }
 
