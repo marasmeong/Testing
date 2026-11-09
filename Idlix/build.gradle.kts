@@ -2,7 +2,7 @@ android {
     namespace = "com.idlix"
 }
 
-version = 5
+version = 6
 
 cloudstream {
     setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/TheAlyss/cloudstream-AlyssRepo")
