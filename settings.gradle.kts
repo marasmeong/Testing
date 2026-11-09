@@ -13,3 +13,5 @@ include(":PusatFilm21")
 include(":BlurayUFR")
 
 include(":MovieBox")
+
+include(":Idlix")
