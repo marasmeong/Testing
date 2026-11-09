@@ -1056,7 +1056,7 @@ class PusatFilm21 : MainAPI() {
                     }
                 }
                 scheduledTasks.add(blankTimeoutTask)
-                handler.postDelayed(blankTimeoutTask, 1000L)
+                // Timeout blank dinonaktifkan sementara agar CAPTCHA manual aman.
 
                 val initialLoadTimeout = Runnable {
                     if (!completed && !mainPageLoaded) {
@@ -1088,7 +1088,7 @@ class PusatFilm21 : MainAPI() {
 
                 webView.loadUrl(pageUrl)
                 handler.postDelayed(checkVideo, 1000)
-                handler.postDelayed(initialLoadTimeout, 20_000L)
+                // Timeout awal dinonaktifkan sementara agar CAPTCHA tidak tertutup.
             }
         }
 
