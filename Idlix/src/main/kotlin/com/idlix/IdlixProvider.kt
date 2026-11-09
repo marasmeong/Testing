@@ -273,12 +273,19 @@ class IdlixProvider : MainAPI() {
             "Accept" to "application/json"
         )
 
-        val info = JSONObject(
-            app.get(
-                "$mainUrl/api/watch/play-info/$contentType/$contentId",
-                headers = headers
-            ).text
+        val infoResponse = app.get(
+            "$mainUrl/api/watch/play-info/$contentType/$contentId",
+            headers = headers
         )
+
+        val didCookie = infoResponse.headers.values("Set-Cookie")
+            .firstOrNull { it.startsWith("did=") }
+            ?.substringBefore(";")
+            ?: return false
+
+        val sessionHeaders = headers + ("Cookie" to didCookie)
+
+        val info = JSONObject(infoResponse.text)
 
         if (info.str("kind") != "gate") return false
 
@@ -296,7 +303,7 @@ class IdlixProvider : MainAPI() {
             val response = JSONObject(
                 app.post(
                     "$mainUrl/api/watch/session/claim",
-                    headers = headers + ("Content-Type" to "application/json"),
+                    headers = sessionHeaders + ("Content-Type" to "application/json"),
                     requestBody = JSONObject()
                         .put("gateToken", info.str("gateToken"))
                         .toString()
