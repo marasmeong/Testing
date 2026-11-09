@@ -126,7 +126,13 @@ class PusatFilm21 : MainAPI() {
 
         rating?.let { response.score = Score.from10(it) }
         if (!quality.isNullOrBlank()) {
-            response.addQuality(quality)
+            val mappedQuality = when {
+                quality.contains("WEB", ignoreCase = true) -> "Web"
+                quality.contains("BLURAY", ignoreCase = true) ||
+                quality.contains("BLU-RAY", ignoreCase = true) -> "Blu-ray"
+                else -> quality
+            }
+            response.addQuality(mappedQuality)
         }
     }
 
