@@ -339,7 +339,20 @@ class PusatFilm21 : MainAPI() {
                     ""
                 }
 
-                if (!isMovie) {
+                if (!isMovie && slug == "oh-my-guard-2026") {
+                    newAnimeSearchResponse(
+                        title,
+                        "$mainUrl/$typeName/$slug",
+                        TvType.Anime
+                    ) {
+                        this.posterUrl = poster.ifBlank { null }
+                        addSub(item.optInt("latestEpisode", 0).takeIf { it > 0 })
+                        item.optString("voteAverage")
+                            .toDoubleOrNull()
+                            ?.takeIf { it > 0.0 }
+                            ?.let { this.score = Score.from10(it) }
+                    }
+                } else if (!isMovie) {
                     newTvSeriesSearchResponse(
                         title,
                         "$mainUrl/$typeName/$slug",
