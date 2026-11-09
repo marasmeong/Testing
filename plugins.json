@@ -138,25 +138,6 @@
     "name": "Rebahin"
   },
   {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=https://sweetiepieparenting.com&sz=%size%",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
-    "fileSize": 0,
-    "status": 1,
-    "language": "id",
-    "authors": [
-      "meong"
-    ],
-    "tvTypes": [
-      "Movie",
-      "TvSeries"
-    ],
-    "version": 1,
-    "internalName": "Idlix",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Idlix.cs3",
-    "name": "Idlix"
-  },
-  {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://nekopoi.care&sz=%size%",
     "apiVersion": 1,
     "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",

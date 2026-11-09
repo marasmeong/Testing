@@ -14,4 +14,3 @@ include(":BlurayUFR")
 
 include(":MovieBox")
 
-include(":Idlix")
