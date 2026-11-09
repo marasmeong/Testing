@@ -345,6 +345,24 @@ class PusatFilm21 : MainAPI() {
                     type
                 ) {
                     this.posterUrl = poster.ifBlank { null }
+
+                    if (isMovie) {
+                        item.optString("voteAverage")
+                            .toDoubleOrNull()
+                            ?.takeIf { it > 0.0 }
+                            ?.let { this.score = Score.from10(it) }
+
+                        val quality = item.optString("quality")
+                        val mappedQuality = when {
+                            quality.contains("bluray", ignoreCase = true) -> "Blu-ray"
+                            quality.contains("web", ignoreCase = true) -> "Web"
+                            else -> quality
+                        }
+
+                        if (mappedQuality.isNotBlank()) {
+                            addQuality(mappedQuality)
+                        }
+                    }
                 }
             }.distinctBy { it.url }
 
