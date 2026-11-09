@@ -351,13 +351,7 @@ class IdlixProvider : MainAPI() {
         val videoUrl = result.str("url")
         if (videoUrl.isBlank()) return false
 
-        IdlixHlsProxy.setMasterUrl(videoUrl)
-        val proxyPort = IdlixHlsProxy.start()
-
-        val upstream = java.net.URI(videoUrl)
-        val playbackUrl = "http://127.0.0.1:$proxyPort" +
-            upstream.rawPath +
-            (upstream.rawQuery?.let { "?$it" } ?: "")
+        val playbackUrl = videoUrl
 
         callback(
             newExtractorLink(
