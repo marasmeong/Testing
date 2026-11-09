@@ -92,10 +92,12 @@ class PusatFilm21 : MainAPI() {
 
     private val homeCategories = listOf(
         "Sedang Trending",
-        "Netflix Originals",
-        "Film Indonesia",
-        "Drama Korea",
         "Film Baru Ditambahkan",
+        "Horror",
+        "Film Indonesia",
+        "Netflix Originals",
+        "Animation",
+        "Drama Korea",
         "Serial TV Baru Ditambahkan"
     )
 
@@ -357,6 +359,8 @@ class PusatFilm21 : MainAPI() {
 
         val path = when (request.name) {
             "Netflix Originals" -> "/network/netflix"
+            "Animation" -> "/genre/animation"
+            "Horror" -> "/genre/horror"
             "Film Indonesia" -> "/movie?sort=latest&country=indonesia"
             "Drama Korea" -> "/series?sort=latest&country=south-korea"
             "Film Baru Ditambahkan" -> "/movie?sort=latest"
