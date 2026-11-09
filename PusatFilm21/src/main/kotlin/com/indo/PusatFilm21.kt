@@ -359,7 +359,9 @@ class PusatFilm21 : MainAPI() {
                             else -> quality
                         }
 
-                        if (mappedQuality.isNotBlank()) {
+                        if (mappedQuality == "Blu-ray") {
+                            this.quality = com.lagradost.cloudstream3.SearchQuality.BlueRay
+                        } else if (mappedQuality.isNotBlank()) {
                             addQuality(mappedQuality)
                         }
                     }
