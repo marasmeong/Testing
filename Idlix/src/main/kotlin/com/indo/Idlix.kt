@@ -1,5 +1,6 @@
 package com.indo
 
+import android.webkit.CookieManager
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.network.CloudflareKiller
@@ -277,13 +278,31 @@ class Idlix : MainAPI() {
         else if (extra.containsKey("season")) "$mainUrl/series/$slug/season/${extra["season"]}/episode/${extra["episode"]}"
         else "$mainUrl/series/$slug"
 
-        var cookieHeader = emptyMap<String, String>()
+        val loginCookies = try {
+            CookieManager.getInstance().getCookie(mainUrl).orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+
+        var cookieHeader = if (loginCookies.isNotBlank()) {
+            mapOf("Cookie" to loginCookies)
+        } else {
+            emptyMap()
+        }
         try {
             val pageResp = app.get(pageUrl, interceptor = cfKiller)
             val setCookie = pageResp.headers["set-cookie"].orEmpty()
             val did = Regex("""\bdid=([^;]+)""").find(setCookie)?.groupValues?.getOrNull(1)
             if (!did.isNullOrBlank()) {
-                cookieHeader = mapOf("Cookie" to "did=$did")
+                cookieHeader = mapOf(
+                    "Cookie" to (
+                        loginCookies.split(";")
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() && !it.startsWith("did=") }
+                            .plus("did=$did")
+                            .joinToString("; ")
+                    )
+                )
             }
         } catch (_: Exception) {}
 
