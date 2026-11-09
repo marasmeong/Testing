@@ -134,7 +134,9 @@ class LayarAsia : MainAPI() {
         val poster = doc.selectFirst(".thumb img, .poster img")?.attr("src")?.ifBlank { null }
             ?: doc.selectFirst("meta[property='og:image']")?.attr("content")?.ifBlank { null }
 
-        val plot = doc.selectFirst(".entry-content, .desc, [itemprop='description'], .sinopsis")?.text()?.trim()
+        val plot = doc.selectFirst(".entry-content")?.text()?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: doc.selectFirst("meta[name='description']")?.attr("content")?.trim()
             ?: doc.selectFirst("meta[property='og:description']")?.attr("content")?.trim()
 
         val year = Regex("""\b(19\d{2}|20\d{2})\b""").find(rawTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
@@ -157,7 +159,7 @@ class LayarAsia : MainAPI() {
             newMovieLoadResponse(title, url, TvType.Movie, streamUrl) {
                 this.posterUrl = tmdb?.posterUrl ?: poster?.let { fixUrlNull(it) }
                 this.backgroundPosterUrl = tmdb?.backgroundPosterUrl
-                this.plot = tmdb?.plot ?: plot
+                this.plot = plot ?: tmdb?.plot
                 this.year = year
                 this.tags = tags
                 if (tmdb?.actors?.isNotEmpty() == true) {
@@ -200,7 +202,7 @@ class LayarAsia : MainAPI() {
             newTvSeriesLoadResponse(title, url, TvType.AsianDrama, finalEpisodes) {
                 this.posterUrl = tmdb?.posterUrl ?: poster?.let { fixUrlNull(it) }
                 this.backgroundPosterUrl = tmdb?.backgroundPosterUrl
-                this.plot = tmdb?.plot ?: plot
+                this.plot = plot ?: tmdb?.plot
                 this.year = year
                 this.tags = tags
                 if (tmdb?.actors?.isNotEmpty() == true) {
