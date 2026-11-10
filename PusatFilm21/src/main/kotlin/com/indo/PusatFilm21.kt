@@ -136,9 +136,85 @@ class PusatFilm21 : MainAPI() {
         }
     }
 
+    private suspend fun fetchLatestEpisodes(): Map<String, Int> {
+        val endpoint = "$mainUrl/series"
+        val payload = JSONArray()
+            .put(
+                JSONObject()
+                    .put("kind", "browse")
+                    .put("type", "series")
+                    .put("sort", "latest")
+            )
+            .put(1)
+            .toString()
+
+        return runCatching {
+            val response = app.post(
+                endpoint,
+                headers = sessionHeaders() + mapOf(
+                    "Next-Action" to "60af38bf64b9450e7f97edaa522beb859519d471e7",
+                    "Accept" to "text/x-component",
+                    "Content-Type" to "text/plain;charset=UTF-8",
+                    "Origin" to mainUrl,
+                    "Referer" to endpoint
+                ),
+                requestBody = payload.toRequestBody(
+                    "text/plain;charset=UTF-8".toMediaType()
+                )
+            ).text
+
+            val dataLine = response.lineSequence()
+                .firstOrNull { it.startsWith("1:") }
+                ?.removePrefix("1:")
+                ?: return@runCatching emptyMap<String, Int>()
+
+            val data = JSONObject(dataLine).optJSONArray("items")
+                ?: return@runCatching emptyMap<String, Int>()
+
+            buildMap {
+                for (i in 0 until data.length()) {
+                    val item = data.optJSONObject(i) ?: continue
+                    val slug = item.optString("slug")
+                    val episode = item.optInt("latestEpisode", 0)
+                    if (slug.isNotBlank() && episode > 0) {
+                        put("$mainUrl/series/$slug", episode)
+                    }
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun seriesPoster(
+        title: String,
+        url: String,
+        poster: String?,
+        type: TvType,
+        element: org.jsoup.nodes.Element?,
+        latestEpisodes: Map<String, Int>
+    ): SearchResponse {
+        val episode = if (type == TvType.TvSeries) {
+            latestEpisodes[url]
+        } else null
+
+        val response = if (type == TvType.TvSeries && episode != null) {
+            newAnimeSearchResponse(title, url, TvType.Anime) {
+                this.posterUrl = poster
+                addSub(episode)
+            }
+        } else {
+            newMovieSearchResponse(title, url, type) {
+                this.posterUrl = poster
+            }
+        }
+
+        if (element != null) applyPosterMetadata(element, response)
+        return response
+    }
+
     private fun categoryItems(
         doc: org.jsoup.nodes.Document,
-        category: String
+        category: String,
+        latestEpisodes: Map<String, Int> = emptyMap()
     ): List<SearchResponse> {
         val heading = doc.select("h2").firstOrNull {
             it.text().trim() == category
@@ -182,9 +258,10 @@ class PusatFilm21 : MainAPI() {
                 TvType.Movie
             }
 
-            newMovieSearchResponse(title, "$mainUrl$href", type) {
-                this.posterUrl = poster.ifBlank { null }
-            }.also { applyPosterMetadata(a, it) }
+            seriesPoster(
+                title, "$mainUrl$href", poster.ifBlank { null },
+                type, a, latestEpisodes
+            )
         }
     }
 
@@ -266,7 +343,7 @@ class PusatFilm21 : MainAPI() {
             ).document
 
             val items = if (page == 1) {
-                categoryItems(doc, request.name).take(15)
+                categoryItems(doc, request.name, fetchLatestEpisodes()).take(15)
             } else {
                 emptyList()
             }
@@ -339,28 +416,16 @@ class PusatFilm21 : MainAPI() {
                     ""
                 }
 
-                if (!isMovie && slug == "oh-my-guard-2026") {
+                if (!isMovie) {
                     newAnimeSearchResponse(
                         title,
                         "$mainUrl/$typeName/$slug",
                         TvType.Anime
                     ) {
                         this.posterUrl = poster.ifBlank { null }
-                        addSub(item.optInt("latestEpisode", 0).takeIf { it > 0 })
-                        item.optString("voteAverage")
-                            .toDoubleOrNull()
-                            ?.takeIf { it > 0.0 }
-                            ?.let { this.score = Score.from10(it) }
-                    }
-                } else if (!isMovie) {
-                    newTvSeriesSearchResponse(
-                        title,
-                        "$mainUrl/$typeName/$slug",
-                        TvType.TvSeries
-                    ) {
-                        this.posterUrl = poster.ifBlank { null }
-                        this.episodes = item.optInt("latestEpisode", 0)
+                        item.optInt("latestEpisode", 0)
                             .takeIf { it > 0 }
+                            ?.let { addSub(it) }
                         item.optString("voteAverage")
                             .toDoubleOrNull()
                             ?.takeIf { it > 0.0 }
@@ -410,7 +475,8 @@ class PusatFilm21 : MainAPI() {
 
             val homeItems = categoryItems(
                 homeDoc,
-                request.name
+                request.name,
+                fetchLatestEpisodes()
             )
 
             if (homeItems.isNotEmpty()) {
@@ -466,6 +532,8 @@ class PusatFilm21 : MainAPI() {
             headers = sessionHeaders()
         ).document
 
+        val latestEpisodes = fetchLatestEpisodes()
+
         val items = doc.select(
             "a.group[href^='/movie/'], " +
             "a.group[href^='/series/'], " +
@@ -493,13 +561,10 @@ class PusatFilm21 : MainAPI() {
                 TvType.Movie
             }
 
-            newMovieSearchResponse(
-                title,
-                "$mainUrl$href",
-                type
-            ) {
-                this.posterUrl = poster?.ifBlank { null }
-            }.also { applyPosterMetadata(a, it) }
+            seriesPoster(
+                title, "$mainUrl$href", poster?.ifBlank { null },
+                type, a, latestEpisodes
+            )
         }.distinctBy { it.url }
 
         val hasNext = doc.select("a[href]").any { a ->
