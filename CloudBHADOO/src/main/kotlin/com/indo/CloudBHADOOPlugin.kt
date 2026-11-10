@@ -37,7 +37,20 @@ class CloudBHADOOPlugin : Plugin() {
                         .apply()
                 }
                 .setNegativeButton("Batal", null)
-                .show()
+                .create().apply {
+                    setOnShowListener {
+                        getButton(AlertDialog.BUTTON_POSITIVE)
+                            .setTextColor(android.graphics.Color.WHITE)
+                        getButton(AlertDialog.BUTTON_NEGATIVE)
+                            .setTextColor(android.graphics.Color.WHITE)
+                    }
+                    show()
+                }.apply {
+                    getButton(AlertDialog.BUTTON_POSITIVE)
+                        .setTextColor(android.graphics.Color.WHITE)
+                    getButton(AlertDialog.BUTTON_NEGATIVE)
+                        .setTextColor(android.graphics.Color.WHITE)
+                }
         }
     }
 }
