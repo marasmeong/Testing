@@ -117,147 +117,13 @@ class PusatFilm21 : MainAPI() {
             ?.trim()
             ?.toDoubleOrNull()
 
-        val quality = element.select("span")
-            .firstOrNull {
-                it.className().contains("border-quality-")
-            }
-            ?.text()
-            ?.trim()
-
-        rating?.let { response.score = Score.from10(it) }
-        if (!quality.isNullOrBlank()) {
-            val mappedQuality = when {
-                quality.contains("WEB", ignoreCase = true) -> "Web"
-                quality.contains("BLURAY", ignoreCase = true) ||
-                quality.contains("BLU-RAY", ignoreCase = true) -> "Blu-ray"
-                else -> quality
-            }
-            response.addQuality(mappedQuality)
-        }
-    }
-
-    @Volatile
-    private var episodeCache: Map<String, Int> = emptyMap()
-
-    @Volatile
-    private var episodeCacheTime = 0L
-
-    private val episodeCacheMutex = kotlinx.coroutines.sync.Mutex()
-
-    private suspend fun fetchLatestEpisodes(): Map<String, Int> {
-        val now = System.currentTimeMillis()
-        if (episodeCache.isNotEmpty() &&
-            now - episodeCacheTime < 30 * 60 * 1000L
-        ) return episodeCache
-
-        return episodeCacheMutex.lockAndFetchEpisodes()
-    }
-
-    private suspend fun kotlinx.coroutines.sync.Mutex.lockAndFetchEpisodes(): Map<String, Int> {
-        lock()
-        try {
-            if (episodeCache.isNotEmpty() &&
-                System.currentTimeMillis() - episodeCacheTime < 30 * 60 * 1000L
-            ) return episodeCache
-
-            val episodes = fetchAllEpisodePages()
-            if (episodes.isNotEmpty()) {
-                episodeCache = episodes
-                episodeCacheTime = System.currentTimeMillis()
-            }
-            return episodes.ifEmpty { episodeCache }
-        } finally {
-            unlock()
-        }
-    }
-
-    private suspend fun fetchAllEpisodePages(): Map<String, Int> {
-        val endpoint = "$mainUrl/series"
-        val result = mutableMapOf<String, Int>()
-
-        for (page in 1..30) {
-            val payload = JSONArray()
-                .put(
-                    JSONObject()
-                        .put("kind", "browse")
-                        .put("type", "series")
-                        .put("sort", "latest")
-                )
-                .put(page)
-                .toString()
-
-            val data = runCatching {
-                val response = app.post(
-                    endpoint,
-                    headers = sessionHeaders() + mapOf(
-                        "Next-Action" to "60af38bf64b9450e7f97edaa522beb859519d471e7",
-                        "Accept" to "text/x-component",
-                        "Content-Type" to "text/plain;charset=UTF-8",
-                        "Origin" to mainUrl,
-                        "Referer" to endpoint
-                    ),
-                    requestBody = payload.toRequestBody(
-                        "text/plain;charset=UTF-8".toMediaType()
-                    )
-                ).text
-
-                val line = response.lineSequence()
-                    .firstOrNull { it.startsWith("1:") }
-                    ?.removePrefix("1:")
-                    ?: return@runCatching null
-
-                JSONObject(line)
-            }.getOrNull() ?: break
-
-            val items = data.optJSONArray("items") ?: break
-
-            for (i in 0 until items.length()) {
-                val item = items.optJSONObject(i) ?: continue
-                val slug = item.optString("slug")
-                val episode = item.optInt("latestEpisode", 0)
-
-                if (slug.isNotBlank() && episode > 0) {
-                    result["$mainUrl/series/$slug"] = episode
-                }
-            }
-
-            if (!data.optBoolean("hasMore", false)) break
-        }
-
-        return result
-    }
-
-    private fun seriesPoster(
-        title: String,
-        url: String,
-        poster: String?,
-        type: TvType,
-        element: org.jsoup.nodes.Element?,
-        latestEpisodes: Map<String, Int>
-    ): SearchResponse {
-        val episode = if (type == TvType.TvSeries) {
-            latestEpisodes[url]
-        } else null
-
-        val response = if (type == TvType.TvSeries && episode != null) {
-            newAnimeSearchResponse(title, url, TvType.Anime) {
-                this.posterUrl = poster
-                addSub(episode)
-            }
-        } else {
-            newMovieSearchResponse(title, url, type) {
-                this.posterUrl = poster
-            }
-        }
-
-        if (element != null) applyPosterMetadata(element, response)
-        return response
+        rating?.takeIf { it > 0.0 }
+            ?.let { response.score = Score.from10(it) }
     }
 
     private fun categoryItems(
         doc: org.jsoup.nodes.Document,
-        category: String,
-        latestEpisodes: Map<String, Int> = emptyMap()
+        category: String
     ): List<SearchResponse> {
         val heading = doc.select("h2").firstOrNull {
             it.text().trim() == category
@@ -301,10 +167,9 @@ class PusatFilm21 : MainAPI() {
                 TvType.Movie
             }
 
-            seriesPoster(
-                title, "$mainUrl$href", poster.ifBlank { null },
-                type, a, latestEpisodes
-            )
+            newMovieSearchResponse(title, "$mainUrl$href", type) {
+                this.posterUrl = poster.ifBlank { null }
+            }.also { applyPosterMetadata(a, it) }
         }
     }
 
@@ -317,17 +182,6 @@ class PusatFilm21 : MainAPI() {
         .replace(Regex("""\s+\((?:19|20)\d{2}\)\s*$"""), "")
         .trim()
 
-
-    private fun posterQuality(a: org.jsoup.nodes.Element): com.lagradost.cloudstream3.SearchQuality? {
-        val label = a.selectFirst("span[class*=quality-]")?.text()?.trim()?.lowercase()
-            ?: return null
-        return when {
-            "bluray" in label || "blu-ray" in label -> com.lagradost.cloudstream3.SearchQuality.BlueRay
-            "web" in label || "hdrip" in label -> com.lagradost.cloudstream3.SearchQuality.HD
-            "cam" in label -> com.lagradost.cloudstream3.SearchQuality.Cam
-            else -> null
-        }
-    }
 
     private fun parseMovies(doc: org.jsoup.nodes.Document): List<SearchResponse> {
         val seen = mutableSetOf<String>()
@@ -360,21 +214,6 @@ class PusatFilm21 : MainAPI() {
     }
 
 
-    private val listingAction =
-        "6042bc2c39a25ba91866155b430d64491c00a0d641"
-
-    private fun listingSource(category: String): Pair<String, String>? =
-        when (category) {
-            "Netflix Originals" -> "network" to "netflix"
-            "Film Indonesia" -> "movie" to "indonesia"
-            "Drama Korea" -> "series" to "south-korea"
-            "Film Baru Ditambahkan" -> "movie" to "latest"
-            "Serial TV Baru Ditambahkan" -> "series" to "release"
-            else -> null
-        }
-
-
-
     override suspend fun getMainPage(
         page: Int,
         request: MainPageRequest
@@ -386,7 +225,7 @@ class PusatFilm21 : MainAPI() {
             ).document
 
             val items = if (page == 1) {
-                categoryItems(doc, request.name, fetchLatestEpisodes()).take(15)
+                categoryItems(doc, request.name).take(15)
             } else {
                 emptyList()
             }
@@ -460,15 +299,12 @@ class PusatFilm21 : MainAPI() {
                 }
 
                 if (!isMovie) {
-                    newAnimeSearchResponse(
+                    newTvSeriesSearchResponse(
                         title,
                         "$mainUrl/$typeName/$slug",
-                        TvType.Anime
+                        TvType.TvSeries
                     ) {
                         this.posterUrl = poster.ifBlank { null }
-                        item.optInt("latestEpisode", 0)
-                            .takeIf { it > 0 }
-                            ?.let { addSub(it) }
                         item.optString("voteAverage")
                             .toDoubleOrNull()
                             ?.takeIf { it > 0.0 }
@@ -481,25 +317,10 @@ class PusatFilm21 : MainAPI() {
                 ) {
                     this.posterUrl = poster.ifBlank { null }
 
-                    if (isMovie) {
-                        item.optString("voteAverage")
-                            .toDoubleOrNull()
-                            ?.takeIf { it > 0.0 }
-                            ?.let { this.score = Score.from10(it) }
-
-                        val quality = item.optString("quality")
-                        val mappedQuality = when {
-                            quality.contains("bluray", ignoreCase = true) -> "Blu-ray"
-                            quality.contains("web", ignoreCase = true) -> "Web"
-                            else -> quality
-                        }
-
-                        if (mappedQuality == "Blu-ray") {
-                            this.quality = com.lagradost.cloudstream3.SearchQuality.BlueRay
-                        } else if (mappedQuality.isNotBlank()) {
-                            addQuality(mappedQuality)
-                        }
-                    }
+                    item.optString("voteAverage")
+                        .toDoubleOrNull()
+                        ?.takeIf { it > 0.0 }
+                        ?.let { this.score = Score.from10(it) }
                 }
             }.distinctBy { it.url }
 
@@ -518,8 +339,7 @@ class PusatFilm21 : MainAPI() {
 
             val homeItems = categoryItems(
                 homeDoc,
-                request.name,
-                fetchLatestEpisodes()
+                request.name
             )
 
             if (homeItems.isNotEmpty()) {
@@ -575,8 +395,6 @@ class PusatFilm21 : MainAPI() {
             headers = sessionHeaders()
         ).document
 
-        val latestEpisodes = fetchLatestEpisodes()
-
         val items = doc.select(
             "a.group[href^='/movie/'], " +
             "a.group[href^='/series/'], " +
@@ -604,10 +422,11 @@ class PusatFilm21 : MainAPI() {
                 TvType.Movie
             }
 
-            seriesPoster(
-                title, "$mainUrl$href", poster?.ifBlank { null },
-                type, a, latestEpisodes
-            )
+            newMovieSearchResponse(
+                title, "$mainUrl$href", type
+            ) {
+                this.posterUrl = poster?.ifBlank { null }
+            }.also { applyPosterMetadata(a, it) }
         }.distinctBy { it.url }
 
         val hasNext = doc.select("a[href]").any { a ->
@@ -1032,10 +851,12 @@ class PusatFilm21 : MainAPI() {
 
         val result = openVikingFileWebView(pageUrl)
 
-        vikingSessions[key] = VikingSession(
-            videoUrl = result,
-            timestamp = System.currentTimeMillis()
-        )
+        if (!result.isNullOrBlank()) {
+            vikingSessions[key] = VikingSession(
+                videoUrl = result,
+                timestamp = System.currentTimeMillis()
+            )
+        }
 
         result
     }
@@ -1240,86 +1061,6 @@ class PusatFilm21 : MainAPI() {
                 dialog?.window?.clearFlags(
                     android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                 )
-
-                val blankTimeoutTask = object : Runnable {
-                    override fun run() {
-                        if (completed) return
-
-                        webView.evaluateJavascript(
-                            """
-                            (function() {
-                                var text = (document.body?.innerText || '').trim();
-                                var html = document.body?.innerHTML || '';
-                                var captcha = !!document.querySelector(
-                                    'iframe[src*="challenges.cloudflare.com"],' +
-                                    '.cf-turnstile, #challenge-form, ' +
-                                    '[class*="cf-challenge"]'
-                                ) || /verify you are human|checking your browser|just a moment/i.test(
-                                    text + ' ' + document.title
-                                );
-                                return JSON.stringify({
-                                    blank: text.length === 0 && html.length < 150,
-                                    captcha: captcha
-                                });
-                            })();
-                            """.trimIndent()
-                        ) { result ->
-                            if (completed) return@evaluateJavascript
-
-                            val status = runCatching {
-                                val raw = org.json.JSONTokener(result)
-                                    .nextValue() as String
-                                org.json.JSONObject(raw)
-                            }.getOrNull()
-
-                            val blank = status?.optBoolean("blank") == true
-                            val captcha = status?.optBoolean("captcha") == true
-
-                            val elapsed =
-                                android.os.SystemClock.elapsedRealtime() -
-                                pageFinishedAt
-
-                            if (mainPageLoaded && blank && !captcha &&
-                                elapsed >= 20_000L) {
-                                finish(null)
-                            }
-                        }
-
-                        if (!completed) {
-                            handler.postDelayed(this, 1000L)
-                        }
-                    }
-                }
-                scheduledTasks.add(blankTimeoutTask)
-                // Timeout blank dinonaktifkan sementara agar CAPTCHA manual aman.
-
-                val initialLoadTimeout = Runnable {
-                    if (!completed && !mainPageLoaded) {
-                        webView.evaluateJavascript(
-                            """
-                            (function() {
-                                var body = document.body;
-                                var text = body ? (body.innerText || '').trim() : '';
-                                var html = body ? (body.innerHTML || '') : '';
-                                var captcha = !!document.querySelector(
-                                    'iframe[src*="challenges.cloudflare.com"],' +
-                                    '.cf-turnstile, #challenge-form, ' +
-                                    '[class*="cf-challenge"]'
-                                ) || /verify you are human|checking your browser|just a moment/i.test(
-                                    text + ' ' + document.title
-                                );
-                                return captcha || text.length > 0 || html.length >= 150;
-                            })();
-                            """.trimIndent()
-                        ) { result ->
-                            if (!completed && !mainPageLoaded &&
-                                result != "true") {
-                                finish(null)
-                            }
-                        }
-                    }
-                }
-                scheduledTasks.add(initialLoadTimeout)
 
                 webView.loadUrl(pageUrl)
                 handler.postDelayed(checkVideo, 1000)
