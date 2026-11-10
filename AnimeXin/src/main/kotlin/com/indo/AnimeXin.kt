@@ -404,7 +404,7 @@ class AnimeXin : MainAPI() {
                 (data[i].toInt() xor key[i % key.size].toInt()).toByte()
             }.toString(Charsets.UTF_8)
 
-            val hlsPath = Regex("""\\bHLS=["']([^"']+)["']""")
+            val hlsPath = Regex("""\bHLS=["']([^"']+)["']""")
                 .find(decoded)?.groupValues?.getOrNull(1) ?: return
 
             val hlsUrl = java.net.URI(playerUrl)
