@@ -52,15 +52,27 @@ class BlurayUFR : MainAPI() {
         return doc.select("article.item-infinite, article.item").mapNotNull { toSearchResponse(it) }
     }
 
+    private val posterSizeRegex = Regex(
+        """-\d+x\d+(?=\.(?:jpg|jpeg|png|webp))""",
+        RegexOption.IGNORE_CASE
+    )
+
     private fun cleanPoster(url: String?): String? {
         if (url.isNullOrBlank()) return null
-        return url.replace(Regex("""-\d+x\d+(?=\.(?:jpg|jpeg|png|webp))""", RegexOption.IGNORE_CASE), "")
+        return url.replace(posterSizeRegex, "")
     }
+
+    private val permalinkRegex = Regex(
+        """^Permalink to:\s*""", RegexOption.IGNORE_CASE
+    )
+    private val subtitleTitleRegex = Regex(
+        """\s*Sub(?:title)?\s*Indo(?:nesia)?.*$""", RegexOption.IGNORE_CASE
+    )
 
     private fun cleanTitle(rawTitle: String): String {
         return rawTitle
-            .replace(Regex("""^Permalink to:\s*""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*Sub(?:title)?\s*Indo(?:nesia)?.*$""", RegexOption.IGNORE_CASE), "")
+            .replace(permalinkRegex, "")
+            .replace(subtitleTitleRegex, "")
             .trim()
     }
 
@@ -81,7 +93,6 @@ class BlurayUFR : MainAPI() {
 
         val score = element.selectFirst(".gmr-rating-item")?.text()?.trim()?.toDoubleOrNull()
         val year = Regex("""\((\d{4})\)""").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        val qualityText = element.selectFirst(".gmr-quality-item a, .gmr-quality-item")?.text()?.trim()
 
         val isSeries = href.contains("/tv/") || href.contains("/eps/") || element.selectFirst(".gmr-numbeps") != null
 
@@ -96,12 +107,17 @@ class BlurayUFR : MainAPI() {
                 this.posterUrl = poster
                 this.year = year
                 score?.let { this.score = Score.from10(it) }
-                if (!qualityText.isNullOrBlank()) {
-                    addQuality(qualityText)
-                }
             }
         }
     }
+
+
+    private val seasonEpisodeRegex =
+        Regex("""S(\d+)\s*Eps?\s*(\d+)""", RegexOption.IGNORE_CASE)
+    private val episodeRegex =
+        Regex("""Eps(?:isode)?\s*(\d+)""", RegexOption.IGNORE_CASE)
+    private val episodeUrlRegex =
+        Regex("""season-(\d+)-episode-(\d+)""", RegexOption.IGNORE_CASE)
 
     override suspend fun load(url: String): LoadResponse {
         val doc = app.get(url, headers = headers).document
@@ -140,9 +156,9 @@ class BlurayUFR : MainAPI() {
                 val epUrl = fixUrlNull(epEl.attr("href")) ?: return@mapIndexedNotNull null
                 val epName = epEl.text().trim().ifBlank { "Episode ${index + 1}" }
 
-                val sMatch = Regex("""S(\d+)\s*Eps?\s*(\d+)""", RegexOption.IGNORE_CASE).find(epName)
-                val eMatch = Regex("""Eps(?:isode)?\s*(\d+)""", RegexOption.IGNORE_CASE).find(epName)
-                val urlMatch = Regex("""season-(\d+)-episode-(\d+)""", RegexOption.IGNORE_CASE).find(epUrl)
+                val sMatch = seasonEpisodeRegex.find(epName)
+                val eMatch = episodeRegex.find(epName)
+                val urlMatch = episodeUrlRegex.find(epUrl)
 
                 val seasonNum = sMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
                     ?: urlMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
@@ -267,6 +283,24 @@ class BlurayUFR : MainAPI() {
         }
     }
 
+    private suspend fun decodeAbyssPayload(enc: String): JSONObject? {
+        val payload = JSONObject().put("text", enc).toString()
+        val response = app.post(
+            "https://enc-dec.app/api/dec-abyss",
+            headers = mapOf(
+                "User-Agent" to headers.getValue("User-Agent"),
+                "Content-Type" to "application/json",
+                "Origin" to "https://playhydrax.com",
+                "Referer" to "https://playhydrax.com/"
+            ),
+            json = JsonAsString(payload)
+        ).text
+
+        val json = JSONObject(response)
+        return json.optJSONObject("result")
+            ?.takeIf { json.optInt("status") == 200 }
+    }
+
     private suspend fun extractAbyss(
         embedUrl: String,
         refererUrl: String,
@@ -287,35 +321,12 @@ class BlurayUFR : MainAPI() {
             extractAbyssSubtitles(enc, subtitleCallback)
 
             val jsonPayload = JSONObject().put("text", enc).toString()
-            var decRes = app.post(
-                "https://enc-dec.app/api/dec-abyss",
-                headers = mapOf(
-                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-                    "Content-Type" to "application/json",
-                    "Origin" to "https://playhydrax.com",
-                    "Referer" to "https://playhydrax.com/"
-                ),
-                json = JsonAsString(jsonPayload)
-            ).text
+            var result = decodeAbyssPayload(enc)
 
-            var decJson = JSONObject(decRes)
-            var result = decJson.optJSONObject("result")
-            if (result == null || decJson.optInt("status") != 200) {
+            if (result == null) {
                 val sanitizedEnc = sanitizeAbyssPayload(enc)
                 if (sanitizedEnc != null) {
-                    val sanitizedPayload = JSONObject().put("text", sanitizedEnc).toString()
-                    decRes = app.post(
-                        "https://enc-dec.app/api/dec-abyss",
-                        headers = mapOf(
-                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-                            "Content-Type" to "application/json",
-                            "Origin" to "https://playhydrax.com",
-                            "Referer" to "https://playhydrax.com/"
-                        ),
-                        json = JsonAsString(sanitizedPayload)
-                    ).text
-                    decJson = JSONObject(decRes)
-                    result = decJson.optJSONObject("result")
+                    result = decodeAbyssPayload(sanitizedEnc)
                 }
             }
 
