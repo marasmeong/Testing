@@ -77,7 +77,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
     private fun toSearchResponse(file: VideoFile): SearchResponse =
         newMovieSearchResponse(
-            title(file.name),
+            file.name,
             fileUrl(file.name),
             TvType.Movie
         )
