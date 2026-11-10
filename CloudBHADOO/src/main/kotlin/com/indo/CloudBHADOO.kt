@@ -164,13 +164,28 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val key = getSubsourceKey()
         if (key.isBlank()) return emptyList()
 
-        val response = app.get(
-            "https://api.subsource.net/api/v1/subtitles?movieId=$movieId",
-            headers = mapOf("X-API-Key" to key)
-        )
+        val subtitles = org.json.JSONArray()
+        var page = 1
 
-        val subtitles = org.json.JSONObject(response.text)
-            .optJSONArray("data") ?: return emptyList()
+        while (page <= 100) {
+            val response = app.get(
+                "https://api.subsource.net/api/v1/subtitles?movieId=$movieId&page=$page",
+                headers = mapOf("X-API-Key" to key)
+            )
+
+            val json = org.json.JSONObject(response.text)
+            val items = json.optJSONArray("data") ?: break
+
+            for (i in 0 until items.length()) {
+                subtitles.put(items.get(i))
+            }
+
+            val totalPages = json.optJSONObject("pagination")
+                ?.optInt("pages", 1) ?: 1
+
+            if (page >= totalPages || items.length() == 0) break
+            page++
+        }
 
         fun normalize(value: String): String =
             value.lowercase()
