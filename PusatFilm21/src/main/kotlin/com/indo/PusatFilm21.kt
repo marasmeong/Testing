@@ -95,10 +95,10 @@ class PusatFilm21 : MainAPI() {
         "Film Baru Ditambahkan",
         "Horror",
         "Film Indonesia",
-        "Netflix Originals",
         "Animation",
-        "Drama Korea",
-        "Serial TV Baru Ditambahkan"
+        "Serial TV Baru Ditambahkan",
+        "Episode Terbaru",
+        "Drama Korea"
     )
 
     override val mainPage = mainPageOf(
@@ -365,7 +365,7 @@ class PusatFilm21 : MainAPI() {
         }
 
         val path = when (request.name) {
-            "Netflix Originals" -> "/network/netflix"
+            "Episode Terbaru" -> "/series?sort=latest"
             "Animation" -> "/genre/animation"
             "Horror" -> "/genre/horror"
             "Film Indonesia" -> "/movie?sort=latest&country=indonesia"
