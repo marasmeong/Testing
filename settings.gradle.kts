@@ -4,8 +4,6 @@ include(
     "Anichin",
     "Otakudesu",
     "Sokuja",
-    "LK21",
-    "LayarAsia",
     "AnimeXin",
     )
 
