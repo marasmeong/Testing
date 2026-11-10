@@ -110,11 +110,18 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
 
 
+
     private suspend fun searchSubsourceMovie(
         videoName: String
     ): Int? {
         val key = getSubsourceKey()
         if (key.isBlank()) return null
+
+        fun normalize(value: String): String =
+            value.lowercase(java.util.Locale.ROOT)
+                .replace(Regex("[^a-z0-9]+"), " ")
+                .trim()
+                .replace(Regex("\\s+"), " ")
 
         val filename = videoName.substringBeforeLast(".")
             .replace('.', ' ')
@@ -122,37 +129,77 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
         val yearMatch = Regex("\\b(?:19|20)\\d{2}\\b")
             .find(filename)
+
         val year = yearMatch?.value?.toIntOrNull()
 
-        val title = if (yearMatch != null) {
-            filename.substring(0, yearMatch.range.first).trim()
+        val cleanTitle = if (yearMatch != null) {
+            filename.substring(0, yearMatch.range.first)
         } else {
             filename.replace(
-                Regex("(?i)\\b(?:2160p|1080p|720p|480p|WEB-DL|WEBRip|BluRay|x264|x265|HEVC|HDRip)\\b.*"),
+                Regex(
+                    "(?i)\\b(?:2160p|1080p|720p|480p|" +
+                    "WEB-DL|WEBRip|BluRay|BDRip|HDRip|" +
+                    "DVDRip|x264|x265|HEVC|AV1)\\b.*"
+                ),
                 ""
-            ).trim()
-        }
+            )
+        }.trim()
 
-        if (title.isBlank()) return null
+        val wanted = normalize(cleanTitle)
+        if (wanted.isBlank()) return null
 
-        fun normalize(value: String): String =
-            value.lowercase()
-                .replace(Regex("[^a-z0-9]+"), " ")
-                .trim()
-
-        val wanted = normalize(title)
         val wantedWords = wanted.split(" ")
-            .filter { it.isNotBlank() }
-            .toSet()
+        val query = java.net.URLEncoder.encode(cleanTitle, "UTF-8")
 
-        val query = java.net.URLEncoder.encode(title, "UTF-8")
         val response = app.get(
-            "https://api.subsource.net/api/v1/movies/search?q=$query&searchType=text",
+            "https://api.subsource.net/api/v1/movies/search" +
+                "?q=$query&searchType=text",
             headers = mapOf("X-API-Key" to key)
         )
 
         val movies = org.json.JSONObject(response.text)
             .optJSONArray("data") ?: return null
+
+        fun similarity(candidate: String): Double {
+            val actual = normalize(candidate)
+            if (actual.isBlank()) return 0.0
+            if (actual == wanted) return 1.0
+
+            val actualWords = actual.split(" ")
+
+            // Judul pendek boleh menjadi awalan judul lengkap.
+            // Minimal dua kata untuk menghindari kecocokan acak.
+            val prefix = wantedWords.size >= 2 &&
+                actualWords.size > wantedWords.size &&
+                actualWords.take(wantedWords.size) == wantedWords
+
+            if (prefix) return 0.94
+
+            // Judul lengkap boleh muncul di awal nama alternatif.
+            val reversePrefix = actualWords.size >= 2 &&
+                wantedWords.size > actualWords.size &&
+                wantedWords.take(actualWords.size) == actualWords
+
+            if (reversePrefix) return 0.86
+
+            val a = wantedWords.toSet()
+            val b = actualWords.toSet()
+            val common = a.intersect(b).size
+
+            if (common == 0) return 0.0
+
+            val precision = common.toDouble() / b.size
+            val recall = common.toDouble() / a.size
+
+            val f1 = if (precision + recall == 0.0) 0.0
+                else 2 * precision * recall / (precision + recall)
+
+            // Urutan kata membantu membedakan judul serupa.
+            val sameOrder = wantedWords.filter { it in b } ==
+                actualWords.filter { it in a }
+
+            return if (sameOrder) f1 else f1 * 0.85
+        }
 
         var bestId: Int? = null
         var bestScore = 0.0
@@ -165,34 +212,24 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             val titles = listOf(
                 movie.optString("title"),
                 movie.optString("alternateTitle")
-            ).filter { it.isNotBlank() && it != "null" }
+            ).filter {
+                it.isNotBlank() && it != "null"
+            }
 
-            val similarity = titles.maxOfOrNull { candidate ->
-                val candidateWords = normalize(candidate)
-                    .split(" ")
-                    .filter { it.isNotBlank() }
-                    .toSet()
-
-                if (candidateWords.isEmpty()) {
-                    0.0
-                } else {
-                    val intersection =
-                        wantedWords.intersect(candidateWords).size
-
-                    val union =
-                        wantedWords.union(candidateWords).size
-
-                    if (union == 0) 0.0
-                    else intersection.toDouble() / union
-                }
+            val titleScore = titles.maxOfOrNull {
+                similarity(it)
             } ?: 0.0
 
             val movieYear = movie.optInt("releaseYear")
-            val yearPenalty =
-                if (year != null && movieYear > 0 &&
-                    year != movieYear) 0.15 else 0.0
 
-            val score = similarity - yearPenalty
+            val yearAdjustment = when {
+                year == null || movieYear == 0 -> 0.0
+                year == movieYear -> 0.05
+                kotlin.math.abs(year - movieYear) == 1 -> -0.05
+                else -> -0.20
+            }
+
+            val score = titleScore + yearAdjustment
 
             if (score > bestScore) {
                 bestScore = score
@@ -200,8 +237,13 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             }
         }
 
-        // Minimal 70% kemiripan judul.
-        return if (bestScore >= 0.70) bestId else null
+        android.util.Log.i(
+            "CloudBHADOO",
+            "Subsource match: $cleanTitle ($year), " +
+                "id=$bestId, score=$bestScore"
+        )
+
+        return if (bestScore >= 0.75) bestId else null
     }
 
     private data class SubsourceChoice(
