@@ -150,19 +150,12 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     }
 
 
-
-    private data class SubsourceChoice(
-        val id: Int,
-        val release: String,
-        val score: Int
-    )
-
-    private suspend fun findSubsourceSubtitles(
+    private suspend fun findSubsourceSubtitle(
         movieId: Int,
         videoName: String
-    ): List<SubsourceChoice> {
+    ): Int? {
         val key = getSubsourceKey()
-        if (key.isBlank()) return emptyList()
+        if (key.isBlank()) return null
 
         val response = app.get(
             "https://api.subsource.net/api/v1/subtitles?movieId=$movieId",
@@ -170,7 +163,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         )
 
         val subtitles = org.json.JSONObject(response.text)
-            .optJSONArray("data") ?: return emptyList()
+            .optJSONArray("data") ?: return null
 
         fun normalize(value: String): String =
             value.lowercase()
@@ -178,8 +171,8 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 .trim()
 
         val video = normalize(videoName.substringBeforeLast("."))
-        val videoWords = video.split(" ").filter { it.isNotBlank() }.toSet()
-        val results = mutableListOf<SubsourceChoice>()
+        var bestId: Int? = null
+        var bestScore = -1
 
         for (i in 0 until subtitles.length()) {
             val sub = subtitles.optJSONObject(i) ?: continue
@@ -192,135 +185,33 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             if (id <= 0) continue
 
             val releases = sub.optJSONArray("releaseInfo")
-            val names = if (releases != null) {
-                (0 until releases.length())
-                    .map { releases.optString(it).trim() }
-                    .filter { it.isNotBlank() }
-            } else emptyList()
+            var score = 0
 
-            val release = names.firstOrNull()
-                ?: "Subtitle Indonesia #$id"
-
-            val score = names.maxOfOrNull { name ->
-                val normalized = normalize(name)
-                if (normalized == video) 1000
-                else videoWords.intersect(
-                    normalized.split(" ").toSet()
-                ).size
-            } ?: 0
-
-            results.add(SubsourceChoice(id, release, score))
-        }
-
-        return results
-            .distinctBy { it.id }
-            .sortedWith(
-                compareByDescending<SubsourceChoice> { it.score }
-                    .thenBy { it.release }
-            )
-    }
-
-
-    private val subtitleServerLock = Any()
-    private var subtitleServerPort = 0
-    private val subtitleServerToken =
-        java.util.UUID.randomUUID().toString().replace("-", "")
-
-    private fun serveSubsourceSrt(file: java.io.File): String {
-        require(file.isFile && file.length() > 0L) {
-            "Subtitle SRT tidak tersedia"
-        }
-
-        synchronized(subtitleServerLock) {
-            if (subtitleServerPort == 0) {
-                val server = java.net.ServerSocket(
-                    0,
-                    50,
-                    java.net.InetAddress.getByName("127.0.0.1")
-                )
-                subtitleServerPort = server.localPort
-
-                Thread {
-                    while (!server.isClosed) {
-                        try {
-                            val client = server.accept()
-                            Thread {
-                                client.use { socket ->
-                                    socket.soTimeout = 10000
-                                    try {
-                                        val reader = socket.getInputStream()
-                                            .bufferedReader()
-                                        val request = reader.readLine().orEmpty()
-                                        val path = request.split(" ")
-                                            .getOrNull(1).orEmpty()
-
-                                        val prefix = "/$subtitleServerToken/"
-                                        val name = path.removePrefix(prefix)
-
-                                        val validName = Regex(
-                                            "cloudbhadoo_subsource_[0-9]+\\.srt"
-                                        ).matches(name)
-
-                                        val target = java.io.File(
-                                            context.cacheDir, name
-                                        )
-
-                                        val valid = request.startsWith("GET ") &&
-                                            path.startsWith(prefix) &&
-                                            validName &&
-                                            target.isFile &&
-                                            target.length() in 1..5_000_000
-
-                                        val output = socket.getOutputStream()
-
-                                        if (valid) {
-                                            val bytes = target.readBytes()
-                                            val header =
-                                                "HTTP/1.1 200 OK\r\n" +
-                                                "Content-Type: application/x-subrip; charset=utf-8\r\n" +
-                                                "Content-Length: ${bytes.size}\r\n" +
-                                                "Access-Control-Allow-Origin: *\r\n" +
-                                                "Connection: close\r\n\r\n"
-
-                                            output.write(header.toByteArray())
-                                            output.write(bytes)
-                                        } else {
-                                            output.write(
-                                                ("HTTP/1.1 404 Not Found\r\n" +
-                                                 "Content-Length: 0\r\n" +
-                                                 "Connection: close\r\n\r\n")
-                                                    .toByteArray()
-                                            )
-                                        }
-                                        output.flush()
-                                    } catch (e: Exception) {
-                                        android.util.Log.w(
-                                            "CloudBHADOO", "Subtitle HTTP error", e
-                                        )
-                                    }
-                                }
-                            }.apply {
-                                isDaemon = true
-                                start()
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.w(
-                                "CloudBHADOO", "Subtitle server stopped", e
-                            )
-                            break
-                        }
+            if (releases != null) {
+                for (j in 0 until releases.length()) {
+                    val release = normalize(releases.optString(j))
+                    if (release == video) {
+                        score = maxOf(score, 100)
+                    } else {
+                        val videoWords = video.split(" ").toSet()
+                        val releaseWords = release.split(" ").toSet()
+                        score = maxOf(
+                            score,
+                            videoWords.intersect(releaseWords).size
+                        )
                     }
-                }.apply {
-                    isDaemon = true
-                    name = "CloudBHADOO-SubtitleServer"
-                    start()
                 }
             }
 
-            return "http://127.0.0.1:$subtitleServerPort/" +
-                "$subtitleServerToken/${file.name}"
+            if (score > bestScore) {
+                bestScore = score
+                bestId = id
+            }
         }
+
+        return bestId
     }
+
 
     private suspend fun downloadSubsourceSrt(
         subtitleId: Int
@@ -385,7 +276,8 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                         if (!file.exists() || file.length() == 0L) {
                             throw java.io.IOException("Extracted SRT is empty")
                         }
-                        return@withContext serveSubsourceSrt(file)
+                        return@withContext android.net.Uri
+                            .fromFile(file).toString()
                     }
 
                     zip.closeEntry()
@@ -483,24 +375,19 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             val movieId = searchSubsourceMovie(videoName)
 
             if (movieId != null) {
-                val choices = findSubsourceSubtitles(movieId, videoName)
+                val subtitleId = findSubsourceSubtitle(
+                    movieId, videoName
+                )
 
-                for (choice in choices) {
-                    try {
-                        val subtitleUrl = downloadSubsourceSrt(choice.id)
-                            ?: continue
+                if (subtitleId != null) {
+                    val subtitleUrl = downloadSubsourceSrt(subtitleId)
 
+                    if (subtitleUrl != null) {
                         subtitleCallback(
                             SubtitleFile(
-                                "Indonesian | ${choice.release.take(100)}",
+                                "Indonesian (Subsource - ${java.io.File(android.net.Uri.parse(subtitleUrl).path ?: "").length()} bytes)",
                                 subtitleUrl
                             )
-                        )
-                    } catch (e: Exception) {
-                        android.util.Log.w(
-                            "CloudBHADOO",
-                            "Subtitle ${choice.id} failed",
-                            e
                         )
                     }
                 }
