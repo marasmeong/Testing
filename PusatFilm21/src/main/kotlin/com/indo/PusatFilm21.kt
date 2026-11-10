@@ -331,7 +331,7 @@ class PusatFilm21 : MainAPI() {
             )
         }
 
-        if (page == 1) {
+        if (page == 1 && request.name != "Episode Terbaru") {
             val homeDoc = app.get(
                 mainUrl,
                 headers = sessionHeaders()
@@ -395,11 +395,15 @@ class PusatFilm21 : MainAPI() {
             headers = sessionHeaders()
         ).document
 
-        val items = doc.select(
+        val cardSelector = if (request.name == "Episode Terbaru") {
+            "a.group[href^='/series/']"
+        } else {
             "a.group[href^='/movie/'], " +
             "a.group[href^='/series/'], " +
             "a.group[href^='/tv/']"
-        ).mapNotNull { a ->
+        }
+
+        val items = doc.select(cardSelector).mapNotNull { a ->
             val href = a.attr("href")
 
             val title = a.selectFirst("h2")
@@ -422,11 +426,19 @@ class PusatFilm21 : MainAPI() {
                 TvType.Movie
             }
 
-            newMovieSearchResponse(
-                title, "$mainUrl$href", type
-            ) {
-                this.posterUrl = poster?.ifBlank { null }
-            }.also { applyPosterMetadata(a, it) }
+            if (request.name == "Episode Terbaru") {
+                newTvSeriesSearchResponse(
+                    title, "$mainUrl$href", TvType.TvSeries
+                ) {
+                    this.posterUrl = poster?.ifBlank { null }
+                }.also { applyPosterMetadata(a, it) }
+            } else {
+                newMovieSearchResponse(
+                    title, "$mainUrl$href", type
+                ) {
+                    this.posterUrl = poster?.ifBlank { null }
+                }.also { applyPosterMetadata(a, it) }
+            }
         }.distinctBy { it.url }
 
         val hasNext = doc.select("a[href]").any { a ->
