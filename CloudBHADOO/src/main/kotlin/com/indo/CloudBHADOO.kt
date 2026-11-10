@@ -121,6 +121,32 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 .trim()
                 .replace(Regex("\\s+"), " ")
 
+        fun similarity(a: String, b: String): Double {
+            if (a == b) return 1.0
+            if (a.isEmpty() || b.isEmpty()) return 0.0
+
+            var previous = IntArray(b.length + 1) { it }
+
+            for (i in a.indices) {
+                val current = IntArray(b.length + 1)
+                current[0] = i + 1
+
+                for (j in b.indices) {
+                    val cost = if (a[i] == b[j]) 0 else 1
+                    current[j + 1] = minOf(
+                        current[j] + 1,
+                        previous[j + 1] + 1,
+                        previous[j] + cost
+                    )
+                }
+
+                previous = current
+            }
+
+            return 1.0 - previous[b.length].toDouble() /
+                maxOf(a.length, b.length)
+        }
+
         val filename = videoName.substringAfterLast("/")
         val cleaned = filename.substringBeforeLast(".")
             .replace('.', ' ')
@@ -195,6 +221,16 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                         score = maxOf(score, 90)
                     }
 
+                    // Fuzzy matching untuk judul salah ketik.
+                    // Skor 100 tetap diprioritaskan untuk judul persis.
+                    val fuzzy = similarity(target, actual)
+                    if (fuzzy >= 0.85) {
+                        score = maxOf(
+                            score,
+                            (fuzzy * 95).toInt()
+                        )
+                    }
+
                     val movieYear = movie.optInt("releaseYear")
                     if (year != null) {
                         if (movieYear == year) score += 10
@@ -236,13 +272,37 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val key = getSubsourceKey()
         if (key.isBlank()) return emptyList()
 
-        val response = app.get(
-            "https://api.subsource.net/api/v1/subtitles?movieId=$movieId",
-            headers = mapOf("X-API-Key" to key)
-        )
+        val subtitles = org.json.JSONArray()
+        var page = 1
 
-        val subtitles = org.json.JSONObject(response.text)
-            .optJSONArray("data") ?: return emptyList()
+        while (page <= 20) {
+            val response = try {
+                app.get(
+                    "https://api.subsource.net/api/v1/subtitles?movieId=$movieId&page=$page",
+                    headers = mapOf("X-API-Key" to key)
+                )
+            } catch (e: Exception) {
+                android.util.Log.w(
+                    "CloudBHADOO",
+                    "Subsource subtitles page $page failed",
+                    e
+                )
+                break
+            }
+
+            val json = org.json.JSONObject(response.text)
+            val data = json.optJSONArray("data") ?: break
+
+            for (i in 0 until data.length()) {
+                subtitles.put(data.get(i))
+            }
+
+            val pagination = json.optJSONObject("pagination")
+            val pages = pagination?.optInt("pages", 1) ?: 1
+
+            if (page >= pages || data.length() == 0) break
+            page++
+        }
 
         fun normalize(value: String): String =
             value.lowercase()
