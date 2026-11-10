@@ -106,8 +106,8 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             TvType.Movie,
             url
         ) {
-            posterUrl = "$mainUrl/1:/logodua.jpg"
-            backgroundPosterUrl = "$mainUrl/1:/logodua.jpg"
+            posterUrl = "$mainUrl/1:/Gambar/logodua.jpg"
+            backgroundPosterUrl = "$mainUrl/1:/Gambar/logodua.jpg"
         }
     }
 
