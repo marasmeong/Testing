@@ -108,161 +108,48 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     }
 
 
-
-
-
-
-
     private suspend fun searchSubsourceMovie(
         videoName: String
     ): Int? {
         val key = getSubsourceKey()
         if (key.isBlank()) return null
 
-        fun normalize(s: String): String =
-            s.lowercase(java.util.Locale.ROOT)
-                .replace(Regex("[^a-z0-9]+"), " ")
-                .trim()
-                .replace(Regex("\\s+"), " ")
-
-        val filename = videoName.substringBeforeLast(".")
-            .replace('.', ' ').replace('_', ' ')
-
-        val yearMatch = Regex("\\b(?:19|20)\\d{2}\\b")
-            .find(filename)
-        val year = yearMatch?.value?.toIntOrNull()
-
-        val title = (if (yearMatch != null) {
-            filename.substring(0, yearMatch.range.first)
-        } else {
-            filename.replace(
-                Regex("(?i)\\b(?:2160p|1080p|720p|480p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"),
+        val title = videoName
+            .substringBeforeLast(".")
+            .replace('.', ' ')
+            .replace('_', ' ')
+            .replace(
+                Regex(
+                    "(?i)\\b(19\\d{2}|20\\d{2}|2160p|1080p|720p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"
+                ),
                 ""
             )
-        }).trim()
+            .trim()
 
         if (title.isBlank()) return null
 
-        val words = normalize(title).split(" ")
-        val queries = linkedSetOf<String>()
-
-        if (year != null) queries.add("$title $year")
-        queries.add(title)
-
-        if (words.size >= 3) {
-            queries.add(words.take(2).joinToString(" "))
-        }
-
-        var bestId: Int? = null
-        var bestScore = -1.0
-
-        for (query in queries) {
-            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-
-            val response = app.get(
-                "https://api.subsource.net/api/v1/movies/search?q=$encoded&searchType=text",
-                headers = mapOf("X-API-Key" to key)
-            )
-
-            val movies = org.json.JSONObject(response.text)
-                .optJSONArray("data") ?: continue
-
-            for (i in 0 until movies.length()) {
-                val movie = movies.optJSONObject(i) ?: continue
-                val id = movie.optInt("movieId")
-                if (id <= 0) continue
-
-                val candidates = listOf(
-                    movie.optString("title"),
-                    movie.optString("alternateTitle")
-                )
-
-                for (candidate in candidates) {
-                    val actual = normalize(candidate)
-                    if (actual.isBlank() || actual == "null") continue
-
-                    val target = normalize(title)
-                    val targetWords = target.split(" ")
-                    val actualWords = actual.split(" ")
-
-                    val common = targetWords.toSet()
-                        .intersect(actualWords.toSet()).size
-
-                    val similarity =
-                        if (actual == target) 1.0
-                        else if (
-                            targetWords.size >= 2 &&
-                            actualWords.take(targetWords.size) == targetWords
-                        ) 0.95
-                        else if (
-                            actualWords.size >= 2 &&
-                            targetWords.take(actualWords.size) == actualWords
-                        ) 0.90
-                        else common.toDouble() /
-                            maxOf(targetWords.size, actualWords.size)
-
-                    val movieYear = movie.optInt("releaseYear")
-                    val score = similarity + when {
-                        year == null || movieYear == 0 -> 0.0
-                        year == movieYear -> 0.10
-                        else -> -0.15
-                    }
-
-                    if (score > bestScore) {
-                        bestScore = score
-                        bestId = id
-                    }
-                }
-            }
-
-            if (bestScore >= 1.0) break
-        }
-
-        android.util.Log.i(
-            "CloudBHADOO",
-            "Subsource: $title ($year) -> $bestId score=$bestScore"
-        )
-
-        return if (bestScore >= 0.55) bestId else null
-    }
-
-
-    data class SubsourceMovieResult(
-        val id: Int,
-        val title: String,
-        val year: Int
-    )
-
-    suspend fun searchSubsourceMoviesManual(
-        query: String
-    ): List<SubsourceMovieResult> {
-        val key = getSubsourceKey()
-        if (key.isBlank() || query.isBlank()) return emptyList()
-
-        val encoded = java.net.URLEncoder.encode(
-            query.trim(), "UTF-8"
-        )
-
+        val query = java.net.URLEncoder.encode(title, "UTF-8")
         val response = app.get(
-            "https://api.subsource.net/api/v1/movies/search?q=$encoded&searchType=text",
+            "https://api.subsource.net/api/v1/movies/search?q=$query&searchType=text",
             headers = mapOf("X-API-Key" to key)
         )
 
         val movies = org.json.JSONObject(response.text)
-            .optJSONArray("data") ?: return emptyList()
+            .optJSONArray("data") ?: return null
 
-        return (0 until movies.length()).mapNotNull { i ->
-            val movie = movies.optJSONObject(i) ?: return@mapNotNull null
-            val id = movie.optInt("movieId")
-            if (id <= 0) return@mapNotNull null
+        for (i in 0 until movies.length()) {
+            val movie = movies.getJSONObject(i)
+            if (movie.optString("title").equals(title, true)) {
+                return movie.optInt("movieId").takeIf { it > 0 }
+            }
+        }
 
-            SubsourceMovieResult(
-                id = id,
-                title = movie.optString("title"),
-                year = movie.optInt("releaseYear")
-            )
-        }.distinctBy { it.id }
+        return movies.optJSONObject(0)
+            ?.optInt("movieId")
+            ?.takeIf { it > 0 }
     }
+
+
 
     private data class SubsourceChoice(
         val id: Int,
@@ -277,28 +164,13 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val key = getSubsourceKey()
         if (key.isBlank()) return emptyList()
 
-        val subtitles = org.json.JSONArray()
-        var page = 1
+        val response = app.get(
+            "https://api.subsource.net/api/v1/subtitles?movieId=$movieId",
+            headers = mapOf("X-API-Key" to key)
+        )
 
-        while (page <= 100) {
-            val response = app.get(
-                "https://api.subsource.net/api/v1/subtitles?movieId=$movieId&page=$page",
-                headers = mapOf("X-API-Key" to key)
-            )
-
-            val json = org.json.JSONObject(response.text)
-            val items = json.optJSONArray("data") ?: break
-
-            for (i in 0 until items.length()) {
-                subtitles.put(items.get(i))
-            }
-
-            val totalPages = json.optJSONObject("pagination")
-                ?.optInt("pages", 1) ?: 1
-
-            if (page >= totalPages || items.length() == 0) break
-            page++
-        }
+        val subtitles = org.json.JSONObject(response.text)
+            .optJSONArray("data") ?: return emptyList()
 
         fun normalize(value: String): String =
             value.lowercase()
@@ -348,27 +220,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             )
     }
 
-
-
-    data class ManualSubtitleResult(
-        val id: Int,
-        val release: String
-    )
-
-    suspend fun getManualSubtitles(
-        movieId: Int,
-        videoName: String
-    ): List<ManualSubtitleResult> {
-        return findSubsourceSubtitles(movieId, videoName).map {
-            ManualSubtitleResult(it.id, it.release)
-        }
-    }
-
-    suspend fun getManualSubtitleUrl(
-        subtitleId: Int
-    ): String? {
-        return downloadSubsourceSrt(subtitleId)
-    }
 
     private val subtitleServerLock = Any()
     private var subtitleServerPort = 0
