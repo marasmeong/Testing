@@ -138,50 +138,58 @@ class PusatFilm21 : MainAPI() {
 
     private suspend fun fetchLatestEpisodes(): Map<String, Int> {
         val endpoint = "$mainUrl/series"
-        val payload = JSONArray()
-            .put(
-                JSONObject()
-                    .put("kind", "browse")
-                    .put("type", "series")
-                    .put("sort", "latest")
-            )
-            .put(1)
-            .toString()
+        val result = mutableMapOf<String, Int>()
 
-        return runCatching {
-            val response = app.post(
-                endpoint,
-                headers = sessionHeaders() + mapOf(
-                    "Next-Action" to "60af38bf64b9450e7f97edaa522beb859519d471e7",
-                    "Accept" to "text/x-component",
-                    "Content-Type" to "text/plain;charset=UTF-8",
-                    "Origin" to mainUrl,
-                    "Referer" to endpoint
-                ),
-                requestBody = payload.toRequestBody(
-                    "text/plain;charset=UTF-8".toMediaType()
+        for (page in 1..10) {
+            val payload = JSONArray()
+                .put(
+                    JSONObject()
+                        .put("kind", "browse")
+                        .put("type", "series")
+                        .put("sort", "latest")
                 )
-            ).text
+                .put(page)
+                .toString()
 
-            val dataLine = response.lineSequence()
-                .firstOrNull { it.startsWith("1:") }
-                ?.removePrefix("1:")
-                ?: return@runCatching emptyMap<String, Int>()
+            val data = runCatching {
+                val response = app.post(
+                    endpoint,
+                    headers = sessionHeaders() + mapOf(
+                        "Next-Action" to "60af38bf64b9450e7f97edaa522beb859519d471e7",
+                        "Accept" to "text/x-component",
+                        "Content-Type" to "text/plain;charset=UTF-8",
+                        "Origin" to mainUrl,
+                        "Referer" to endpoint
+                    ),
+                    requestBody = payload.toRequestBody(
+                        "text/plain;charset=UTF-8".toMediaType()
+                    )
+                ).text
 
-            val data = JSONObject(dataLine).optJSONArray("items")
-                ?: return@runCatching emptyMap<String, Int>()
+                val line = response.lineSequence()
+                    .firstOrNull { it.startsWith("1:") }
+                    ?.removePrefix("1:")
+                    ?: return@runCatching null
 
-            buildMap {
-                for (i in 0 until data.length()) {
-                    val item = data.optJSONObject(i) ?: continue
-                    val slug = item.optString("slug")
-                    val episode = item.optInt("latestEpisode", 0)
-                    if (slug.isNotBlank() && episode > 0) {
-                        put("$mainUrl/series/$slug", episode)
-                    }
+                JSONObject(line)
+            }.getOrNull() ?: break
+
+            val items = data.optJSONArray("items") ?: break
+
+            for (i in 0 until items.length()) {
+                val item = items.optJSONObject(i) ?: continue
+                val slug = item.optString("slug")
+                val episode = item.optInt("latestEpisode", 0)
+
+                if (slug.isNotBlank() && episode > 0) {
+                    result["$mainUrl/series/$slug"] = episode
                 }
             }
-        }.getOrDefault(emptyMap())
+
+            if (!data.optBoolean("hasMore", false)) break
+        }
+
+        return result
     }
 
     private fun seriesPoster(
