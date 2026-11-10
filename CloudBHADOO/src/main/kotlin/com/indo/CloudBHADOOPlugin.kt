@@ -10,6 +10,8 @@ import com.lagradost.cloudstream3.plugins.Plugin
 @CloudstreamPlugin
 class CloudBHADOOPlugin : Plugin() {
     override fun load(context: Context) {
+        registerVideoClickAction(SubsourceSearchAction())
+
         registerMainAPI(CloudBHADOO(context.applicationContext))
 
         openSettings = { ctx ->
