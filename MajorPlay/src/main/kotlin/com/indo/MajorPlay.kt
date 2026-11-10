@@ -24,36 +24,66 @@ class MajorPlay : MainAPI() {
     override val supportedTypes = setOf(TvType.Movie)
 
     override val mainPage = mainPageOf(
-        "/movie" to "Film Terbaru"
+        "featured" to "Featured",
+        "trending-now" to "Trending Now",
+        "trending-country" to "Trending in Indonesia",
+        "network-originals" to "Network Originals",
+        "collections" to "Collections",
+        "latest-movies" to "Film Terbaru"
     )
 
     override suspend fun getMainPage(
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val doc = app.get("$mainUrl${request.data}").document
+        val response = app.get(
+            "$mainUrl/api/homepage",
+            headers = mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer" to "$mainUrl/"
+            )
+        )
 
-        val movies = doc.select("a.block[href^=/movie/]")
-            .distinctBy { it.attr("href") }
-            .mapNotNull { card ->
-                val img = card.selectFirst("img")
-                    ?: return@mapNotNull null
+        val homepage = JSONObject(response.text)
 
-                val title = img.attr("alt").trim()
-                val href = card.attr("href")
-
-                if (title.isBlank() || href.isBlank()) {
-                    return@mapNotNull null
-                }
-
-                newMovieSearchResponse(
-                    title,
-                    "$mainUrl$href",
-                    TvType.Movie
-                ) {
-                    posterUrl = img.attr("src")
-                }
+        val section = sequenceOf("above", "below")
+            .flatMap { area ->
+                val array = homepage.optJSONArray(area)
+                (0 until (array?.length() ?: 0))
+                    .asSequence()
+                    .mapNotNull { array?.optJSONObject(it) }
             }
+            .firstOrNull { it.optString("slug") == request.data }
+
+        val data = section?.optJSONArray("data")
+
+        val movies = (0 until (data?.length() ?: 0)).mapNotNull { i ->
+            val item = data?.optJSONObject(i) ?: return@mapNotNull null
+            if (item.optString("contentType") != "movie") {
+                return@mapNotNull null
+            }
+
+            val content = item.optJSONObject("content")
+                ?: return@mapNotNull null
+
+            val title = content.optString("title")
+            val slug = content.optString("slug")
+            if (title.isBlank() || slug.isBlank()) {
+                return@mapNotNull null
+            }
+
+            val poster = content.optString("posterPath")
+
+            newMovieSearchResponse(
+                title,
+                "$mainUrl/movie/$slug",
+                TvType.Movie
+            ) {
+                posterUrl = if (poster.startsWith("/")) {
+                    "https://image.tmdb.org/t/p/w500$poster"
+                } else null
+            }
+        }
 
         return newHomePageResponse(
             request.name,
@@ -61,7 +91,6 @@ class MajorPlay : MainAPI() {
             hasNext = false
         )
     }
-
 
     override suspend fun load(url: String): LoadResponse? {
         val slug = url.substringBefore("?").trimEnd('/').substringAfterLast("/")
