@@ -109,6 +109,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
 
 
+
     private suspend fun searchSubsourceMovie(
         videoName: String
     ): Int? {
@@ -119,14 +120,15 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             .replace('.', ' ')
             .replace('_', ' ')
 
-        val yearMatch = Regex("\\b(?:19|20)\\d{2}\\b").find(filename)
+        val yearMatch = Regex("\\b(?:19|20)\\d{2}\\b")
+            .find(filename)
         val year = yearMatch?.value?.toIntOrNull()
 
         val title = if (yearMatch != null) {
             filename.substring(0, yearMatch.range.first).trim()
         } else {
             filename.replace(
-                Regex("(?i)\\b(?:2160p|1080p|720p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"),
+                Regex("(?i)\\b(?:2160p|1080p|720p|480p|WEB-DL|WEBRip|BluRay|x264|x265|HEVC|HDRip)\\b.*"),
                 ""
             ).trim()
         }
@@ -138,6 +140,11 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 .replace(Regex("[^a-z0-9]+"), " ")
                 .trim()
 
+        val wanted = normalize(title)
+        val wantedWords = wanted.split(" ")
+            .filter { it.isNotBlank() }
+            .toSet()
+
         val query = java.net.URLEncoder.encode(title, "UTF-8")
         val response = app.get(
             "https://api.subsource.net/api/v1/movies/search?q=$query&searchType=text",
@@ -147,21 +154,54 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val movies = org.json.JSONObject(response.text)
             .optJSONArray("data") ?: return null
 
+        var bestId: Int? = null
+        var bestScore = 0.0
+
         for (i in 0 until movies.length()) {
             val movie = movies.optJSONObject(i) ?: continue
+            val id = movie.optInt("movieId")
+            if (id <= 0) continue
 
-            val sameTitle = normalize(movie.optString("title")) ==
-                normalize(title)
+            val titles = listOf(
+                movie.optString("title"),
+                movie.optString("alternateTitle")
+            ).filter { it.isNotBlank() && it != "null" }
 
-            val sameYear = year == null ||
-                movie.optInt("releaseYear") == year
+            val similarity = titles.maxOfOrNull { candidate ->
+                val candidateWords = normalize(candidate)
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .toSet()
 
-            if (sameTitle && sameYear) {
-                return movie.optInt("movieId").takeIf { it > 0 }
+                if (candidateWords.isEmpty()) {
+                    0.0
+                } else {
+                    val intersection =
+                        wantedWords.intersect(candidateWords).size
+
+                    val union =
+                        wantedWords.union(candidateWords).size
+
+                    if (union == 0) 0.0
+                    else intersection.toDouble() / union
+                }
+            } ?: 0.0
+
+            val movieYear = movie.optInt("releaseYear")
+            val yearPenalty =
+                if (year != null && movieYear > 0 &&
+                    year != movieYear) 0.15 else 0.0
+
+            val score = similarity - yearPenalty
+
+            if (score > bestScore) {
+                bestScore = score
+                bestId = id
             }
         }
 
-        return null
+        // Minimal 70% kemiripan judul.
+        return if (bestScore >= 0.70) bestId else null
     }
 
     private data class SubsourceChoice(
