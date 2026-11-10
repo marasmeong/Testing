@@ -13,3 +13,4 @@ include(
 
 
 include(":CloudBHADOO")
+include(":MajorPlay")
