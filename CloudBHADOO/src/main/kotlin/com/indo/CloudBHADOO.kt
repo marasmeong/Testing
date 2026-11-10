@@ -108,48 +108,54 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     }
 
 
-    private suspend fun searchSubsourceMovie(
-        videoName: String
-    ): Int? {
-        val key = getSubsourceKey()
-        if (key.isBlank()) return null
 
-        val title = videoName
-            .substringBeforeLast(".")
+    private suspend fun searchSubsourceMovies(
+        videoName: String
+    ): List<Pair<Int, String>> {
+        val key = getSubsourceKey()
+        if (key.isBlank()) return emptyList()
+
+        val title = videoName.substringBeforeLast(".")
             .replace('.', ' ')
             .replace('_', ' ')
             .replace(
-                Regex(
-                    "(?i)\\b(19\\d{2}|20\\d{2}|2160p|1080p|720p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"
-                ),
+                Regex("(?i)\\b(19\\d{2}|20\\d{2}|2160p|1080p|720p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"),
                 ""
             )
             .trim()
 
-        if (title.isBlank()) return null
+        if (title.isBlank()) return emptyList()
 
-        val query = java.net.URLEncoder.encode(title, "UTF-8")
-        val response = app.get(
-            "https://api.subsource.net/api/v1/movies/search?q=$query&searchType=text",
-            headers = mapOf("X-API-Key" to key)
-        )
+        val queries = linkedSetOf(title)
 
-        val movies = org.json.JSONObject(response.text)
-            .optJSONArray("data") ?: return null
+        val words = title.split(Regex("\\s+"))
+        if (words.size > 2) {
+            queries.add(words.take(2).joinToString(" "))
+        }
 
-        for (i in 0 until movies.length()) {
-            val movie = movies.getJSONObject(i)
-            if (movie.optString("title").equals(title, true)) {
-                return movie.optInt("movieId").takeIf { it > 0 }
+        val results = mutableListOf<Pair<Int, String>>()
+
+        for (q in queries) {
+            val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+            val response = app.get(
+                "https://api.subsource.net/api/v1/movies/search?q=$encoded&searchType=text",
+                headers = mapOf("X-API-Key" to key)
+            )
+
+            val movies = org.json.JSONObject(response.text)
+                .optJSONArray("data") ?: continue
+
+            for (i in 0 until movies.length()) {
+                val movie = movies.optJSONObject(i) ?: continue
+                val id = movie.optInt("movieId")
+                if (id > 0) {
+                    results.add(id to movie.optString("title"))
+                }
             }
         }
 
-        return movies.optJSONObject(0)
-            ?.optInt("movieId")
-            ?.takeIf { it > 0 }
+        return results.distinctBy { it.first }
     }
-
-
 
     private data class SubsourceChoice(
         val id: Int,
@@ -480,19 +486,21 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 data.substringAfterLast("/"), "UTF-8"
             )
 
-            val movieId = searchSubsourceMovie(videoName)
+            val movies = searchSubsourceMovies(videoName)
+            val seenSubtitles = mutableSetOf<Int>()
 
-            if (movieId != null) {
+            for ((movieId, movieTitle) in movies) {
                 val choices = findSubsourceSubtitles(movieId, videoName)
 
                 for (choice in choices) {
+                    if (!seenSubtitles.add(choice.id)) continue
                     try {
                         val subtitleUrl = downloadSubsourceSrt(choice.id)
                             ?: continue
 
                         subtitleCallback(
                             SubtitleFile(
-                                "Indonesian | ${choice.release.take(100)}",
+                                "Indonesian | ${movieTitle.take(45)} | ${choice.release.take(65)}",
                                 subtitleUrl
                             )
                         )
