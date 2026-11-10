@@ -108,25 +108,35 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     }
 
 
+
     private suspend fun searchSubsourceMovie(
         videoName: String
     ): Int? {
         val key = getSubsourceKey()
         if (key.isBlank()) return null
 
-        val title = videoName
-            .substringBeforeLast(".")
+        val filename = videoName.substringBeforeLast(".")
             .replace('.', ' ')
             .replace('_', ' ')
-            .replace(
-                Regex(
-                    "(?i)\\b(19\\d{2}|20\\d{2}|2160p|1080p|720p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"
-                ),
+
+        val yearMatch = Regex("\\b(?:19|20)\\d{2}\\b").find(filename)
+        val year = yearMatch?.value?.toIntOrNull()
+
+        val title = if (yearMatch != null) {
+            filename.substring(0, yearMatch.range.first).trim()
+        } else {
+            filename.replace(
+                Regex("(?i)\\b(?:2160p|1080p|720p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"),
                 ""
-            )
-            .trim()
+            ).trim()
+        }
 
         if (title.isBlank()) return null
+
+        fun normalize(value: String): String =
+            value.lowercase()
+                .replace(Regex("[^a-z0-9]+"), " ")
+                .trim()
 
         val query = java.net.URLEncoder.encode(title, "UTF-8")
         val response = app.get(
@@ -138,18 +148,21 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             .optJSONArray("data") ?: return null
 
         for (i in 0 until movies.length()) {
-            val movie = movies.getJSONObject(i)
-            if (movie.optString("title").equals(title, true)) {
+            val movie = movies.optJSONObject(i) ?: continue
+
+            val sameTitle = normalize(movie.optString("title")) ==
+                normalize(title)
+
+            val sameYear = year == null ||
+                movie.optInt("releaseYear") == year
+
+            if (sameTitle && sameYear) {
                 return movie.optInt("movieId").takeIf { it > 0 }
             }
         }
 
-        return movies.optJSONObject(0)
-            ?.optInt("movieId")
-            ?.takeIf { it > 0 }
+        return null
     }
-
-
 
     private data class SubsourceChoice(
         val id: Int,
