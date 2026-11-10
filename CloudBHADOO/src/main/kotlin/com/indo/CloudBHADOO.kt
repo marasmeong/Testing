@@ -20,8 +20,8 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     override val hasMainPage = true
 
     override val mainPage = mainPageOf(
-        "1:/" to "Semua Film",
-        "1:/GDFlix/" to "GDFlix"
+        "1:/GDFlix/" to "GDFlix",
+        "1:/" to "Semua Film"
     )
 
     private data class VideoFile(
@@ -105,7 +105,10 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             url,
             TvType.Movie,
             url
-        )
+        ) {
+            posterUrl = "$mainUrl/1:/Logosatu.png"
+            backgroundPosterUrl = "$mainUrl/1:/Logosatu.png"
+        }
     }
 
 
