@@ -136,11 +136,46 @@ class PusatFilm21 : MainAPI() {
         }
     }
 
+    @Volatile
+    private var episodeCache: Map<String, Int> = emptyMap()
+
+    @Volatile
+    private var episodeCacheTime = 0L
+
+    private val episodeCacheMutex = kotlinx.coroutines.sync.Mutex()
+
     private suspend fun fetchLatestEpisodes(): Map<String, Int> {
+        val now = System.currentTimeMillis()
+        if (episodeCache.isNotEmpty() &&
+            now - episodeCacheTime < 30 * 60 * 1000L
+        ) return episodeCache
+
+        return episodeCacheMutex.lockAndFetchEpisodes()
+    }
+
+    private suspend fun kotlinx.coroutines.sync.Mutex.lockAndFetchEpisodes(): Map<String, Int> {
+        lock()
+        try {
+            if (episodeCache.isNotEmpty() &&
+                System.currentTimeMillis() - episodeCacheTime < 30 * 60 * 1000L
+            ) return episodeCache
+
+            val episodes = fetchAllEpisodePages()
+            if (episodes.isNotEmpty()) {
+                episodeCache = episodes
+                episodeCacheTime = System.currentTimeMillis()
+            }
+            return episodes.ifEmpty { episodeCache }
+        } finally {
+            unlock()
+        }
+    }
+
+    private suspend fun fetchAllEpisodePages(): Map<String, Int> {
         val endpoint = "$mainUrl/series"
         val result = mutableMapOf<String, Int>()
 
-        for (page in 1..10) {
+        for (page in 1..30) {
             val payload = JSONArray()
                 .put(
                     JSONObject()
