@@ -108,48 +108,120 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     }
 
 
+
     private suspend fun searchSubsourceMovie(
         videoName: String
     ): Int? {
         val key = getSubsourceKey()
         if (key.isBlank()) return null
 
-        val title = videoName
-            .substringBeforeLast(".")
+        fun normalize(value: String): String =
+            value.lowercase(java.util.Locale.ROOT)
+                .replace(Regex("[^a-z0-9]+"), " ")
+                .trim()
+                .replace(Regex("\\s+"), " ")
+
+        val filename = videoName.substringAfterLast("/")
+        val cleaned = filename.substringBeforeLast(".")
             .replace('.', ' ')
             .replace('_', ' ')
-            .replace(
-                Regex(
-                    "(?i)\\b(19\\d{2}|20\\d{2}|2160p|1080p|720p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"
-                ),
+
+        val yearMatch = Regex("\\b(?:19|20)\\d{2}\\b").find(cleaned)
+        val year = yearMatch?.value?.toIntOrNull()
+
+        val title = if (yearMatch != null) {
+            cleaned.substring(0, yearMatch.range.first).trim()
+        } else {
+            cleaned.replace(
+                Regex("(?i)\\b(?:2160p|1080p|720p|480p|WEB-DL|WEBRip|BluRay|x264|x265)\\b.*"),
                 ""
-            )
-            .trim()
+            ).trim()
+        }
 
         if (title.isBlank()) return null
 
-        val query = java.net.URLEncoder.encode(title, "UTF-8")
-        val response = app.get(
-            "https://api.subsource.net/api/v1/movies/search?q=$query&searchType=text",
-            headers = mapOf("X-API-Key" to key)
-        )
+        val words = title.split(Regex("\\s+"))
+        val queries = linkedSetOf<String>()
 
-        val movies = org.json.JSONObject(response.text)
-            .optJSONArray("data") ?: return null
+        queries.add(filename)
+        if (year != null) queries.add("$title $year")
+        queries.add(title)
+        if (words.size >= 2) {
+            queries.add(words.take(2).joinToString(" "))
+        }
+        if (words.size >= 2) {
+            queries.add(words.first())
+        }
 
-        for (i in 0 until movies.length()) {
-            val movie = movies.getJSONObject(i)
-            if (movie.optString("title").equals(title, true)) {
-                return movie.optInt("movieId").takeIf { it > 0 }
+        val target = normalize(title)
+        val targetWords = target.split(" ").toSet()
+
+        var bestId: Int? = null
+        var bestScore = -999
+
+        val seen = mutableSetOf<Int>()
+
+        for (query in queries) {
+            try {
+                val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+                val response = app.get(
+                    "https://api.subsource.net/api/v1/movies/search?q=$encoded&searchType=text",
+                    headers = mapOf("X-API-Key" to key)
+                )
+
+                val movies = org.json.JSONObject(response.text)
+                    .optJSONArray("data") ?: continue
+
+                for (i in 0 until movies.length()) {
+                    val movie = movies.optJSONObject(i) ?: continue
+                    val id = movie.optInt("movieId")
+                    if (id <= 0 || !seen.add(id)) continue
+
+                    val actual = normalize(movie.optString("title"))
+                    if (actual.isBlank()) continue
+
+                    val actualWords = actual.split(" ").toSet()
+                    val union = targetWords.union(actualWords).size
+                    val overlap = if (union == 0) 0.0 else
+                        targetWords.intersect(actualWords).size.toDouble() / union
+
+                    var score = if (actual == target) {
+                        100
+                    } else {
+                        (overlap * 70).toInt()
+                    }
+
+                    if (actual.startsWith("$target ")) {
+                        score = maxOf(score, 90)
+                    }
+
+                    val movieYear = movie.optInt("releaseYear")
+                    if (year != null) {
+                        if (movieYear == year) score += 10
+                        else if (movieYear > 0) score -= 15
+                    }
+
+                    if (score > bestScore) {
+                        bestScore = score
+                        bestId = id
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(
+                    "CloudBHADOO",
+                    "Subsource query failed: $query",
+                    e
+                )
             }
         }
 
-        return movies.optJSONObject(0)
-            ?.optInt("movieId")
-            ?.takeIf { it > 0 }
+        android.util.Log.i(
+            "CloudBHADOO",
+            "Subsource: $title ($year) -> $bestId score=$bestScore"
+        )
+
+        return if (bestScore >= 55) bestId else null
     }
-
-
 
     private data class SubsourceChoice(
         val id: Int,
