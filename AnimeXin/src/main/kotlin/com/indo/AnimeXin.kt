@@ -393,7 +393,7 @@ class AnimeXin : MainAPI() {
             val html = app.get(playerUrl, headers = playerHeaders).text
 
             val encoded = Regex(
-                """var\\s+k=["']([^"']+)["'],\\s*b=atob\\(["']([^"']+)["']\\)"""
+                """var\s+k=["']([^"']+)["'],\s*b=atob\(["']([^"']+)["']\)"""
             ).find(html) ?: return
 
             val key = encoded.groupValues[1].toByteArray(Charsets.UTF_8)
