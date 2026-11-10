@@ -20,7 +20,8 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     override val hasMainPage = true
 
     override val mainPage = mainPageOf(
-        "1:/" to "Semua Film"
+        "1:/" to "Semua Film",
+        "1:/GDFlix/" to "GDFlix"
     )
 
     private data class VideoFile(
@@ -34,9 +35,9 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         return String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
     }
 
-    private suspend fun getFiles(page: Int): Pair<List<VideoFile>, Boolean> {
+    private suspend fun getFiles(page: Int, path: String): Pair<List<VideoFile>, Boolean> {
         val response = app.post(
-            "$mainUrl/1:/",
+            "$mainUrl/$path",
             data = mapOf(
                 "page_token" to "",
                 "page_index" to (page - 1).toString()
@@ -56,16 +57,16 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 !filename.endsWith(".mp4", true)
             ) return@mapNotNull null
 
-            VideoFile(filename, file.optString("id"))
+            VideoFile(filename, path)
         }
 
         val hasNext = !json.isNull("nextPageToken")
         return result to hasNext
     }
 
-    private fun fileUrl(filename: String): String {
+    private fun fileUrl(filename: String, path: String): String {
         val encoded = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
-        return "$mainUrl/1:/$encoded"
+        return "$mainUrl/$path$encoded"
     }
 
     private fun title(filename: String): String =
@@ -78,7 +79,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     private fun toSearchResponse(file: VideoFile): SearchResponse =
         newMovieSearchResponse(
             title(file.name),
-            fileUrl(file.name),
+            fileUrl(file.name, file.id),
             TvType.Movie
         )
 
@@ -86,7 +87,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val (files, hasNext) = getFiles(page)
+        val (files, hasNext) = getFiles(page, request.data)
         return newHomePageResponse(
             request.name,
             files.map(::toSearchResponse),
@@ -600,7 +601,13 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 ) "English" else "Indonesian"
 
                 subtitleCallback(
-                    SubtitleFile(language, fileUrl(filename))
+                    SubtitleFile(
+                        language,
+                        fileUrl(
+                            filename,
+                            if (data.contains("/1:/GDFlix/")) "1:/GDFlix/" else "1:/"
+                        )
+                    )
                 )
             }
         } catch (e: Exception) {
