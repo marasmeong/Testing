@@ -413,7 +413,7 @@ class AnimeXin : MainAPI() {
 
             callback(newExtractorLink(
                 "GDrivePlayer",
-                "$serverLabel - GDrivePlayer",
+                "GDrivePlayer",
                 hlsUrl
             ) {
                 this.type = ExtractorLinkType.M3U8
