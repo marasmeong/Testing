@@ -269,6 +269,13 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                             }
                         }
 
+                        android.util.Log.i(
+                            "CloudBHADOO",
+                            "Subsource SRT downloaded: ${file.name}, size=${file.length()} bytes"
+                        )
+                        if (!file.exists() || file.length() == 0L) {
+                            throw java.io.IOException("Extracted SRT is empty")
+                        }
                         return@withContext android.net.Uri
                             .fromFile(file).toString()
                     }
@@ -377,7 +384,10 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
                     if (subtitleUrl != null) {
                         subtitleCallback(
-                            SubtitleFile("Indonesian (Subsource)", subtitleUrl)
+                            SubtitleFile(
+                                "Indonesian (Subsource - ${java.io.File(android.net.Uri.parse(subtitleUrl).path ?: "").length()} bytes)",
+                                subtitleUrl
+                            )
                         )
                     }
                 }
