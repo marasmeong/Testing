@@ -381,6 +381,50 @@ class AnimeXin : MainAPI() {
         }
     }
 
+
+    private suspend fun extractGDrivePlayer(
+        url: String,
+        serverLabel: String,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        try {
+            val playerUrl = if (url.startsWith("//")) "https:$url" else url
+            val playerHeaders = headers + ("Referer" to "$mainUrl/")
+            val html = app.get(playerUrl, headers = playerHeaders).text
+
+            val encoded = Regex(
+                """var\\s+k=["']([^"']+)["'],\\s*b=atob\\(["']([^"']+)["']\\)"""
+            ).find(html) ?: return
+
+            val key = encoded.groupValues[1].toByteArray(Charsets.UTF_8)
+            val data = Base64.decode(encoded.groupValues[2], Base64.DEFAULT)
+            if (key.isEmpty()) return
+
+            val decoded = ByteArray(data.size) { i ->
+                (data[i].toInt() xor key[i % key.size].toInt()).toByte()
+            }.toString(Charsets.UTF_8)
+
+            val hlsPath = Regex("""\\bHLS=["']([^"']+)["']""")
+                .find(decoded)?.groupValues?.getOrNull(1) ?: return
+
+            val hlsUrl = java.net.URI(playerUrl)
+                .resolve(hlsPath.replace("&amp;", "&"))
+                .toString()
+
+            callback(newExtractorLink(
+                "GDrivePlayer",
+                "$serverLabel - GDrivePlayer",
+                hlsUrl
+            ) {
+                this.type = ExtractorLinkType.M3U8
+                this.referer = playerUrl
+                this.headers = mapOf("Referer" to playerUrl)
+            })
+        } catch (_: Exception) {
+            // Jangan mengganggu server lain jika GDrivePlayer gagal.
+        }
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -457,7 +501,9 @@ class AnimeXin : MainAPI() {
         }
 
         links.forEach { (url, serverLabel) ->
-            if (url.contains("ok.ru", ignoreCase = true)) {
+            if (url.contains("gdriveplayer.to", ignoreCase = true)) {
+                extractGDrivePlayer(url, serverLabel, callback)
+            } else if (url.contains("ok.ru", ignoreCase = true)) {
                 extractOkru(url, serverLabel, callback)
             } else if (
                 url.contains("play.d.tube", ignoreCase = true) ||
