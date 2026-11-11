@@ -2,8 +2,14 @@ package com.indo
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 
 class Idlix : MainAPI() {
+    private val posterCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val posterSemaphore = kotlinx.coroutines.sync.Semaphore(5)
+
 
     override var mainUrl = "https://z2.idlixku.com"
     override var name = "IDLIX"
@@ -32,33 +38,37 @@ class Idlix : MainAPI() {
             it.text().trim() == request.data
         }
 
-        val items = heading?.parent()
-            ?.select("a[href^=/movie/], a[href^=/series/]")
-            ?.mapNotNull { element ->
-                val title = element.text().trim()
-                val href = element.attr("href")
+        val items = kotlinx.coroutines.coroutineScope {
+            heading?.parent()
+                ?.select("a[href^=/movie/], a[href^=/series/]")
+                ?.map { element ->
+                    async {
+                        posterSemaphore.withPermit {
+                            val title = element.text().trim()
+                            val href = element.attr("href")
 
-                if (title.isBlank() || href.isBlank()) {
-                    null
-                } else {
-                    val type = if (href.startsWith("/series/")) {
-                        TvType.TvSeries
-                    } else {
-                        TvType.Movie
-                    }
+                            if (title.isBlank() || href.isBlank()) {
+                                null
+                            } else {
+                                val type = if (href.startsWith("/series/")) {
+                                    TvType.TvSeries
+                                } else {
+                                    TvType.Movie
+                                }
 
-                    val detailUrl = "$mainUrl$href"
-                    val poster = getPoster(detailUrl)
+                                val detailUrl = "$mainUrl$href"
+                                val poster = getPoster(detailUrl)
 
-                    newMovieSearchResponse(
-                        title,
-                        detailUrl,
-                        type
-                    ) {
-                        posterUrl = poster
+                                newMovieSearchResponse(title, detailUrl, type) {
+                                    posterUrl = poster
+                                }
+                            }
+                        }
                     }
                 }
-            }.orEmpty()
+                ?.mapNotNull { it.await() }
+                .orEmpty()
+        }
 
         return newHomePageResponse(
             request.name,
@@ -69,6 +79,8 @@ class Idlix : MainAPI() {
 
 
     private suspend fun getPoster(url: String): String? {
+        posterCache[url]?.let { return it }
+
         return try {
             val document = app.get(url).document
             val scripts = document.select("script[type=application/ld+json]")
@@ -85,6 +97,7 @@ class Idlix : MainAPI() {
                         val poster = images?.optString(0)
 
                         if (!poster.isNullOrBlank()) {
+                            posterCache[url] = poster
                             return poster
                         }
                     }
@@ -237,6 +250,45 @@ class Idlix : MainAPI() {
             }
         }
 
+        val details = document.select("dt").mapNotNull { dt ->
+            val key = dt.text().trim()
+            val value = dt.nextElementSibling()
+                ?.takeIf { it.tagName() == "dd" }
+                ?.text()?.trim()
+
+            if (key.isNotBlank() && !value.isNullOrBlank()) {
+                key to value
+            } else null
+        }.toMap()
+
+        val movieInfo = mutableListOf<String>()
+
+        listOf(
+            "Rating", "Released", "Runtime",
+            "Country", "Language", "Director"
+        ).forEach { key ->
+            details[key]?.let { movieInfo.add("$key: $it") }
+        }
+
+        val tagline = document.select("article p")
+            .map { it.text().trim() }
+            .firstOrNull {
+                it.isNotBlank() &&
+                it != movie?.optString("description") &&
+                it.length < 150 &&
+                !it.startsWith("Watch ")
+            }
+
+        if (!tagline.isNullOrBlank()) {
+            movieInfo.add("Tagline: $tagline")
+        }
+
+        val fullPlot = (
+            movieInfo.joinToString("\n") +
+            "\n\n" +
+            movie?.optString("description").orEmpty()
+        ).trim()
+
         return newMovieLoadResponse(
             title,
             url,
@@ -245,7 +297,7 @@ class Idlix : MainAPI() {
         ) {
             posterUrl = poster
             backgroundPosterUrl = backdrop
-            plot = movie?.optString("description")
+            plot = fullPlot
             this.year = year
             tags = genreList
             duration = minutes
