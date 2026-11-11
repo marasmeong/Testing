@@ -114,7 +114,8 @@ class Idlix : MainAPI() {
 
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
-                if (item.optString("@type") == "Movie") {
+                if (item.optString("@type") == "Movie" ||
+                    item.optString("@type") == "TVSeries") {
                     metadata = item
                     break
                 }
@@ -147,12 +148,93 @@ class Idlix : MainAPI() {
         val year = movie?.optString("datePublished")
             ?.take(4)?.toIntOrNull()
 
-        val durationMatch = Regex("""PT(?:(\\d+)H)?(?:(\\d+)M)?""")
+        val durationMatch = Regex("""PT(?:(\d+)H)?(?:(\d+)M)?""")
             .find(movie?.optString("duration").orEmpty())
 
         val minutes = durationMatch?.let {
             (it.groupValues[1].toIntOrNull() ?: 0) * 60 +
                 (it.groupValues[2].toIntOrNull() ?: 0)
+        }
+
+        val isSeries = url.contains("/series/") ||
+            movie?.optString("@type") == "TVSeries"
+
+        if (isSeries) {
+            val episodes = mutableListOf<Episode>()
+            val seasonPattern = Regex(
+                """/series/[^/]+/season/(\d+)/episode/1"""
+            )
+
+            val seasons = document.select("a[href]")
+                .mapNotNull { element ->
+                    val href = element.attr("href")
+                    val match = seasonPattern.find(href)
+                    match?.groupValues?.get(1)?.toIntOrNull()
+                        ?.let { it to "$mainUrl$href" }
+                }
+                .distinctBy { it.first }
+                .sortedBy { it.first }
+
+            for ((seasonNumber, firstUrl) in seasons) {
+                val found = try {
+                    getSeasonEpisodes(firstUrl, seasonNumber)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                for ((episodeNumber, episodeUrl) in found) {
+                    val episodeDoc = try {
+                        app.get(episodeUrl).document
+                    } catch (_: Exception) {
+                        null
+                    }
+
+                    val pageTitle = episodeDoc?.title().orEmpty()
+                    val episodeTitle = Regex(
+                        """S\d+E\d+: (.*?) / IDLIX"""
+                    ).find(pageTitle)?.groupValues?.get(1)
+                        ?.takeIf { it.isNotBlank() }
+
+                    val description = episodeDoc
+                        ?.selectFirst("meta[name=description]")
+                        ?.attr("content")
+
+                    val releaseDate = episodeDoc
+                        ?.selectFirst("meta[property=video:release_date]")
+                        ?.attr("content")
+
+                    episodes.add(
+                        newEpisode(episodeUrl) {
+                            name = episodeTitle ?: "Episode $episodeNumber"
+                            season = seasonNumber
+                            episode = episodeNumber
+                            releaseDate?.let {
+                                date = try {
+                                    java.time.LocalDate.parse(it)
+                                        .atStartOfDay(java.time.ZoneOffset.UTC)
+                                        .toInstant()
+                                        .toEpochMilli()
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
+            return newTvSeriesLoadResponse(
+                title,
+                url,
+                TvType.TvSeries,
+                episodes
+            ) {
+                posterUrl = poster
+                backgroundPosterUrl = backdrop
+                plot = movie?.optString("description")
+                this.year = year
+                tags = genreList
+            }
         }
 
         return newMovieLoadResponse(
@@ -168,6 +250,36 @@ class Idlix : MainAPI() {
             tags = genreList
             duration = minutes
         }
+    }
+
+
+
+    private suspend fun getSeasonEpisodes(
+        firstEpisodeUrl: String,
+        season: Int
+    ): List<Pair<Int, String>> {
+        val document = app.get(firstEpisodeUrl).document
+        val pattern = Regex(
+            """/series/[^/"\s\\]+/season/(\d+)/episode/(\d+)"""
+        )
+
+        val episodes = mutableMapOf<Int, String>()
+
+        for (script in document.select("script")) {
+            val content = script.data()
+                .replace("\\/", "/")
+
+            for (match in pattern.findAll(content)) {
+                val episodeSeason = match.groupValues[1].toIntOrNull()
+                val episodeNumber = match.groupValues[2].toIntOrNull()
+
+                if (episodeSeason == season && episodeNumber != null) {
+                    episodes[episodeNumber] = mainUrl + match.value
+                }
+            }
+        }
+
+        return episodes.toSortedMap().map { it.key to it.value }
     }
 
 }
