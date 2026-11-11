@@ -13,3 +13,5 @@ include(
 
 
 include(":CloudBHADOO")
+
+include(":Idlix")
