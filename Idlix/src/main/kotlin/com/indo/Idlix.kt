@@ -48,13 +48,7 @@ class Idlix : MainAPI() {
                     }
 
                     val detailUrl = "$mainUrl$href"
-                    val poster = try {
-                        app.get(detailUrl).document
-                            .selectFirst("meta[property=og:image]")
-                            ?.attr("content")
-                    } catch (_: Exception) {
-                        null
-                    }
+                    val poster = getPoster(detailUrl)
 
                     newMovieSearchResponse(
                         title,
