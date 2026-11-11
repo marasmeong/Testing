@@ -8,7 +8,7 @@ import kotlinx.coroutines.async
 
 class Idlix : MainAPI() {
     private val posterCache = java.util.concurrent.ConcurrentHashMap<String, String>()
-    private val posterSemaphore = kotlinx.coroutines.sync.Semaphore(5)
+    private val posterSemaphore = kotlinx.coroutines.sync.Semaphore(8)
 
 
     override var mainUrl = "https://z2.idlixku.com"
@@ -196,41 +196,11 @@ class Idlix : MainAPI() {
                 }
 
                 for ((episodeNumber, episodeUrl) in found) {
-                    val episodeDoc = try {
-                        app.get(episodeUrl).document
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                    val pageTitle = episodeDoc?.title().orEmpty()
-                    val episodeTitle = Regex(
-                        """S\d+E\d+: (.*?) / IDLIX"""
-                    ).find(pageTitle)?.groupValues?.get(1)
-                        ?.takeIf { it.isNotBlank() }
-
-                    val description = episodeDoc
-                        ?.selectFirst("meta[name=description]")
-                        ?.attr("content")
-
-                    val releaseDate = episodeDoc
-                        ?.selectFirst("meta[property=video:release_date]")
-                        ?.attr("content")
-
                     episodes.add(
                         newEpisode(episodeUrl) {
-                            name = episodeTitle ?: "Episode $episodeNumber"
+                            name = "Episode $episodeNumber"
                             season = seasonNumber
                             episode = episodeNumber
-                            releaseDate?.let {
-                                date = try {
-                                    java.time.LocalDate.parse(it)
-                                        .atStartOfDay(java.time.ZoneOffset.UTC)
-                                        .toInstant()
-                                        .toEpochMilli()
-                                } catch (_: Exception) {
-                                    null
-                                }
-                            }
                         }
                     )
                 }
