@@ -20,8 +20,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     override val hasMainPage = true
 
     override val mainPage = mainPageOf(
-        "1:/GDFlix/" to "GDFlix",
-        "1:/" to "Semua Film"
+        "1:/" to "Cloud BHADOO"
     )
 
     private data class VideoFile(
@@ -64,6 +63,49 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         return result to hasNext
     }
 
+    private data class DriveFolder(
+        val name: String,
+        val path: String
+    )
+
+    private suspend fun getFolders(): List<DriveFolder> {
+        val result = mutableListOf<DriveFolder>()
+        var page = 0
+
+        do {
+            val response = app.post(
+                "$mainUrl/1:/",
+                data = mapOf(
+                    "page_token" to "",
+                    "page_index" to page.toString()
+                )
+            )
+
+            val json = org.json.JSONObject(decodeResponse(response.text))
+            val files = json.getJSONObject("data").getJSONArray("files")
+
+            for (i in 0 until files.length()) {
+                val item = files.getJSONObject(i)
+                val name = item.optString("name")
+                val mime = item.optString("mimeType")
+
+                if (mime == "application/vnd.google-apps.folder" &&
+                    name !in setOf("Gambar", "Colab Notebooks")
+                ) {
+                    val encoded = URLEncoder.encode(name, "UTF-8")
+                        .replace("+", "%20")
+
+                    result.add(DriveFolder(name, "1:/$encoded/"))
+                }
+            }
+
+            page++
+            val hasNext = !json.isNull("nextPageToken")
+        } while (hasNext && page < 20)
+
+        return result
+    }
+
     private fun fileUrl(filename: String, path: String): String {
         val encoded = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
         return "$mainUrl/$path$encoded"
@@ -87,12 +129,46 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val (files, hasNext) = getFiles(page, request.data)
-        return newHomePageResponse(
-            request.name,
-            files.map(::toSearchResponse),
-            hasNext
-        )
+        if (request.data != "1:/") {
+            val (files, hasNext) = getFiles(page, request.data)
+            return newHomePageResponse(
+                request.name,
+                files.map(::toSearchResponse),
+                hasNext
+            )
+        }
+
+        val categories = mutableListOf<HomePageList>()
+
+        val (rootFiles, _) = getFiles(1, "1:/")
+        if (rootFiles.isNotEmpty()) {
+            categories.add(
+                HomePageList(
+                    "Semua Film",
+                    rootFiles.map(::toSearchResponse),
+                    false
+                )
+            )
+        }
+
+        for (folder in getFolders()) {
+            try {
+                val (videos, _) = getFiles(1, folder.path)
+                if (videos.isNotEmpty()) {
+                    categories.add(
+                        HomePageList(
+                            folder.name,
+                            videos.map(::toSearchResponse),
+                            false
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                println("CloudBHADOO folder ${folder.name}: ${e.message}")
+            }
+        }
+
+        return newHomePageResponse(categories, false)
     }
 
     override suspend fun load(url: String): LoadResponse {
