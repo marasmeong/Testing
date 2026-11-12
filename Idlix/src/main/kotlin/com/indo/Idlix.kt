@@ -735,7 +735,15 @@ class Idlix : MainAPI() {
 
             idlixLog("SESSION", "didCookie=${!did.isNullOrBlank()}")
             val mergedCookies = linkedMapOf<String, String>()
-                emptyMap<String, String>()["Cookie"]
+                CookieManager.getInstance().getCookie(mainUrl)
+                ?.split(";")
+                ?.mapNotNull { part ->
+                    val pair = part.trim().split("=", limit = 2)
+                    if (pair.size == 2 && pair[0] in setOf(
+                            "did", "has_session", "has_access"
+                        )) pair.joinToString("=") else null
+                }
+                ?.joinToString("; ")
                     ?.split(";")
                     ?.forEach { part ->
                         val pair = part.trim().split("=", limit = 2)
@@ -746,7 +754,13 @@ class Idlix : MainAPI() {
                 if (!did.isNullOrBlank()) {
                     mergedCookies["did"] = did
                 }
-                if (mergedCookies.isNotEmpty()) {
+                idlixLog(
+                "PLAYBACK_AUTH",
+                "hasSession=${mergedCookies.containsKey("has_session")} " +
+                "hasAccess=${mergedCookies.containsKey("has_access")} " +
+                "hasDid=${mergedCookies.containsKey("did")}"
+            )
+            if (mergedCookies.isNotEmpty()) {
                     cookies = mapOf(
                         "Cookie" to mergedCookies.entries.joinToString("; ") {
                             "${it.key}=${it.value}"
