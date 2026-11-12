@@ -36,10 +36,6 @@ class Idlix : MainAPI() {
                 val webView = WebView(activity).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    settings.userAgentString =
-                        "Mozilla/5.0 (Linux; Android 14; Mobile) " +
-                        "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                        "Chrome/130.0.0.0 Mobile Safari/537.36"
                     webViewClient = WebViewClient()
                 }
 
@@ -72,7 +68,8 @@ class Idlix : MainAPI() {
                 layout.addView(
                     webView,
                     android.widget.LinearLayout.LayoutParams(
-                        -1, 0, 1f
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        (activity.resources.displayMetrics.heightPixels * 0.60f).toInt()
                     )
                 )
 
@@ -108,7 +105,10 @@ class Idlix : MainAPI() {
                 dialog.show()
                 dialog.window?.setLayout(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                    (activity.resources.displayMetrics.heightPixels * 0.85f).toInt()
+                    (activity.resources.displayMetrics.heightPixels * 0.75f).toInt()
+                )
+                dialog.window?.clearFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                 )
                 webView.loadUrl(mainUrl)
             }
