@@ -106,6 +106,10 @@ class Idlix : MainAPI() {
                 }
 
                 dialog.show()
+                dialog.window?.setLayout(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    (activity.resources.displayMetrics.heightPixels * 0.85f).toInt()
+                )
                 webView.loadUrl(mainUrl)
             }
         }
