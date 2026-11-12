@@ -513,6 +513,13 @@ class Idlix : MainAPI() {
 
                     val stream = response.optString("url")
             idlixLog("STREAM", "available=${stream.isNotBlank()} m3u8=${stream.contains(".m3u8")} mp4=${stream.contains(".mp4")}")
+            if (stream.isNotBlank()) {
+                val uri = java.net.URI(stream)
+                idlixLog(
+                    "STREAM_SHAPE",
+                    "host=${uri.host} path=${uri.path} hasQuery=${uri.query != null}"
+                )
+            }
             idlixLog("SUBTITLE", "count=${response.optJSONArray("subtitles")?.length() ?: 0}")
 
                     if (stream.isNotBlank()) {
