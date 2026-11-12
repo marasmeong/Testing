@@ -562,6 +562,19 @@ class Idlix : MainAPI() {
                         }
                         val text = bytes.toString(Charsets.UTF_8)
                         if (text.trimStart().startsWith("#EXTM3U")) {
+                            val variants = text.lineSequence()
+                                .filter { it.startsWith("#EXT-X-STREAM-INF:") }
+                                .map { line ->
+                                    val resolution = Regex("""RESOLUTION=(\\d+x\\d+)""")
+                                        .find(line)?.groupValues?.get(1) ?: "unknown"
+                                    val bandwidth = Regex("""BANDWIDTH=(\\d+)""")
+                                        .find(line)?.groupValues?.get(1) ?: "unknown"
+                                    "$resolution bandwidth=$bandwidth"
+                                }.toList()
+                            android.util.Log.e(
+                                "IDLIX_DEBUG",
+                                "[HLS_QUALITY] variants=${variants.size} details=${variants.joinToString("; ")}"
+                            )
                             val rewritten = rewritePlaylist(text, url, session, serverPort, parts[0])
                                 .toByteArray(Charsets.UTF_8)
                             reply(out, 200, "OK", "application/vnd.apple.mpegurl", rewritten.size.toLong())
