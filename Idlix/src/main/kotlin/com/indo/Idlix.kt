@@ -529,7 +529,52 @@ class Idlix : MainAPI() {
                         interceptor = cfKiller
                     )
 
-                    val body = configHttp.text
+
+                                // Diagnostic: test child HLS playlists without exposing signed URLs.
+                                if (configHttp.code == 200 && configHttp.text.trimStart().startsWith("#EXTM3U")) {
+                                    val masterUri = java.net.URI(configHttp.url)
+                                    val masterBody = configHttp.text
+
+                                    val audioPath = Regex("""#EXT-X-MEDIA:TYPE=AUDIO[^\\r\\n]*URI="([^"]+)"""")
+                                        .find(masterBody)?.groupValues?.get(1)
+
+                                    val videoPath = masterBody.lines()
+                                        .map { it.trim() }
+                                        .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
+
+                                    for ((kind, path) in listOf(
+                                        "audio" to audioPath,
+                                        "video" to videoPath
+                                    )) {
+                                        if (path.isNullOrBlank()) {
+                                            idlixLog("MP_CHILD", "kind=$kind found=false")
+                                            continue
+                                        }
+
+                                        try {
+                                            val childUri = masterUri.resolve(path)
+                                            val childHttp = app.get(
+                                                childUri.toString(),
+                                                headers = apiHeaders + mapOf("Referer" to "$mainUrl/"),
+                                                interceptor = cfKiller
+                                            )
+                                            val childBody = childHttp.text.trimStart()
+                                            idlixLog(
+                                                "MP_CHILD",
+                                                "kind=$kind status=${childHttp.code} " +
+                                                    "host=${childUri.host} " +
+                                                    "hasQuery=${childUri.rawQuery != null} " +
+                                                    "bytes=${childHttp.text.length} " +
+                                                    "isHls=${childBody.startsWith("#EXTM3U")} " +
+                                                    "isHtml=${childBody.startsWith("<")}"
+                                            )
+                                        } catch (e: Exception) {
+                                            idlixLog("MP_CHILD", "kind=$kind error=${e.javaClass.simpleName}")
+                                        }
+                                    }
+                                }
+
+                                val body = configHttp.text
                     val trimmed = body.trimStart()
                     val contentType = configHttp.headers["content-type"].orEmpty()
                     val finalUri = java.net.URI(configHttp.url)
