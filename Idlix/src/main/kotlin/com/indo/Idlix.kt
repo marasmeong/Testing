@@ -443,8 +443,7 @@ class Idlix : MainAPI() {
 
             if (redeemUrl.isNotBlank() && claimToken.isNotBlank()) {
                 try {
-                    val response = JSONObject(
-                        app.post(
+                    val redeemHttp = app.post(
                             java.net.URI("$mainUrl/").resolve(redeemUrl).toString(),
                             headers = mapOf(
                                 "Origin" to mainUrl,
@@ -456,8 +455,14 @@ class Idlix : MainAPI() {
                                     .put("claim", claimToken)
                                     .toString()
                             )
-                        ).text
+                        )
+                    android.util.Log.e(
+                        "IDLIX_DEBUG",
+                        "Redeem HTTP=${redeemHttp.code}, " +
+                        "Content-Type=${redeemHttp.headers["Content-Type"]}, " +
+                        "Length=${redeemHttp.text.length}"
                     )
+                    val response = JSONObject(redeemHttp.text)
 
                     val stream = response.optString("url")
 
