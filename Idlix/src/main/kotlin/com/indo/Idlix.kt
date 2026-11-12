@@ -49,7 +49,8 @@ class Idlix : MainAPI() {
                     "IDLIX_DEBUG",
                     "[AUTH_COOKIE_CHECK] refreshToken=${"refresh_token" in cookieNames} " +
                         "refreshRecovery=${"refresh_recovery" in cookieNames} " +
-                        "hasSession=${"has_session" in cookieNames}"
+                        "hasSession=${"has_session" in cookieNames} " +
+                        "hasAccess=${"has_access" in cookieNames}"
                 )
                 manager.setAcceptCookie(true)
                 manager.setAcceptThirdPartyCookies(webView, true)
