@@ -298,7 +298,7 @@ class Idlix : MainAPI() {
         private val sessions = java.util.concurrent.ConcurrentHashMap<String, HlsSession>()
         private val userAgent = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
         private val permittedHosts = setOf(
-            "e2e.majorplay.net", "g7.akademivo.website", "g7.aspireheightsacademy.digital"
+            "e2e.majorplay.net", "g7.akademivo.website", "g7.edubambu.store"
         )
 
         private class HlsSession(val origin: String, val signedQuery: String) {
