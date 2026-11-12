@@ -520,6 +520,32 @@ class Idlix : MainAPI() {
                     "host=${uri.host} path=${uri.path} hasQuery=${uri.query != null}"
                 )
             }
+            if (stream.isNotBlank() && java.net.URI(stream).host == "e2e.majorplay.net") {
+                try {
+                    val configHttp = app.get(
+                        stream,
+                        headers = apiHeaders + mapOf("Referer" to "$mainUrl/"),
+                        interceptor = cfKiller
+                    )
+                    idlixLog("MAJORPLAY_HTTP", "HTTP=${configHttp.code} bytes=${configHttp.text.length}")
+                    val config = org.json.JSONObject(configHttp.text)
+                    idlixLog("MAJORPLAY_KEYS", config.keys().asSequence().joinToString(","))
+                    config.keys().asSequence().forEach { key ->
+                        val value = config.opt(key)
+                        val kind = when (value) {
+                            is org.json.JSONObject -> "object"
+                            is org.json.JSONArray -> "array(${value.length()})"
+                            is String -> "string"
+                            is Number -> "number"
+                            is Boolean -> "boolean"
+                            else -> "null"
+                        }
+                        idlixLog("MAJORPLAY_FIELD", "$key=$kind")
+                    }
+                } catch (e: Exception) {
+                    idlixLog("MAJORPLAY_ERROR", e.javaClass.simpleName)
+                }
+            }
             idlixLog("SUBTITLE", "count=${response.optJSONArray("subtitles")?.length() ?: 0}")
 
                     if (stream.isNotBlank()) {
