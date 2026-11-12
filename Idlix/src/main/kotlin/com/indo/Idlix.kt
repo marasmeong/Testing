@@ -440,6 +440,15 @@ class Idlix : MainAPI() {
 
             val redeemUrl = claim.optString("redeemUrl")
             val claimToken = claim.optString("claim")
+            android.util.Log.e(
+                "IDLIX_DEBUG",
+                "Redeem URL shape: " +
+                "absolute=${redeemUrl.startsWith("http")}, " +
+                "startsSlash=${redeemUrl.startsWith("/")}, " +
+                "hasQuery=${redeemUrl.contains("?")}, " +
+                "length=${redeemUrl.length}"
+            )
+
 
             if (redeemUrl.isNotBlank() && claimToken.isNotBlank()) {
                 try {
