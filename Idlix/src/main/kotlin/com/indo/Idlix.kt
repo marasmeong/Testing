@@ -291,6 +291,181 @@ class Idlix : MainAPI() {
     }
 
 
+    // HLS proxy: process-local so playback survives MainAPI instance recreation.
+    private companion object HlsProxy {
+        private val lock = Any()
+        private var serverPort = 0
+        private val sessions = java.util.concurrent.ConcurrentHashMap<String, HlsSession>()
+        private val userAgent = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+        private val permittedHosts = setOf(
+            "e2e.majorplay.net", "g7.akademivo.website", "g7.aspireheightsacademy.digital"
+        )
+
+        private class HlsSession(val origin: String, val signedQuery: String) {
+            val resources = java.util.concurrent.ConcurrentHashMap<String, String>()
+            val created = System.currentTimeMillis()
+            fun register(url: String): String {
+                val id = java.util.UUID.randomUUID().toString().replace("-", "")
+                resources[id] = url
+                return id
+            }
+        }
+
+        private fun allowed(url: java.net.URI): Boolean =
+            url.scheme.equals("https", true) && url.host?.lowercase(java.util.Locale.ROOT) in permittedHosts &&
+                (url.port == -1 || url.port == 443) && url.userInfo == null
+
+        private fun signedUrl(base: String, reference: String, session: HlsSession): String {
+            val target = java.net.URI(base).resolve(reference)
+            require(allowed(target)) { "HLS host not permitted" }
+            val query = target.rawQuery.orEmpty()
+            val names = query.split('&').map { it.substringBefore('=') }.toSet()
+            val inherited = session.signedQuery.split('&').filter {
+                it.isNotBlank() && it.substringBefore('=') !in names
+            }
+            val merged = (listOf(query).filter { it.isNotBlank() } + inherited).joinToString("&")
+            return java.net.URI(target.scheme, target.rawAuthority, target.rawPath, null, target.rawFragment)
+                .toASCIIString().substringBefore('#') + if (merged.isNotEmpty()) "?$merged" else ""
+        }
+
+        private fun rewritePlaylist(body: String, base: String, session: HlsSession, port: Int, sid: String): String {
+            fun local(ref: String): String {
+                val url = signedUrl(base, ref, session)
+                return "http://127.0.0.1:$port/$sid/${session.register(url)}"
+            }
+            val uriAttribute = Regex("""URI="([^"]+)"""")
+            return body.lineSequence().map { line ->
+                if (line.startsWith("#")) {
+                    uriAttribute.replace(line) { match ->
+                        "URI=\"${local(match.groupValues[1])}\""
+                    }
+                } else if (line.isNotBlank()) {
+                    local(line.trim())
+                } else line
+            }.joinToString("\n")
+        }
+
+        private fun reply(out: java.io.OutputStream, code: Int, reason: String, type: String, length: Long) {
+            out.write(("HTTP/1.1 $code $reason\r\n" +
+                "Content-Type: $type\r\n" +
+                (if (length >= 0) "Content-Length: $length\r\n" else "") +
+                "Access-Control-Allow-Origin: *\r\n" +
+                "Accept-Ranges: bytes\r\n" +
+                "Connection: close\r\n\r\n").toByteArray(Charsets.US_ASCII))
+        }
+
+        private fun handle(socket: java.net.Socket) {
+            socket.use { client ->
+                client.soTimeout = 20000
+                val input = client.getInputStream().bufferedReader(Charsets.US_ASCII)
+                val request = input.readLine().orEmpty().split(' ')
+                val method = request.getOrNull(0).orEmpty()
+                val path = request.getOrNull(1).orEmpty().substringBefore('?')
+                var range: String? = null
+                for (i in 0 until 60) {
+                    val line = input.readLine() ?: break
+                    if (line.isEmpty()) break
+                    if (line.startsWith("Range:", true)) range = line.substringAfter(':').trim()
+                }
+                val out = client.getOutputStream()
+                val parts = path.split('/').filter { it.isNotEmpty() }
+                val session = if (parts.size == 2) sessions[parts[0]] else null
+                val target = parts.getOrNull(1)?.let { session?.resources?.get(it) }
+                if (method != "GET" && method != "HEAD" || session == null || target == null ||
+                    System.currentTimeMillis() - session.created > 3_600_000L) {
+                    reply(out, 404, "Not Found", "text/plain", 0)
+                    return
+                }
+                var url: String = target!!
+                var conn: java.net.HttpURLConnection? = null
+                try {
+                    var redirects = 0
+                    while (true) {
+                        if (redirects++ >= 5) error("Too many redirects")
+                        val uri = java.net.URI(url)
+                        require(allowed(uri)) { "Disallowed HLS host" }
+                        val current = (uri.toURL().openConnection() as java.net.HttpURLConnection).apply {
+                            instanceFollowRedirects = false
+                            connectTimeout = 12000
+                            readTimeout = 20000
+                            setRequestProperty("User-Agent", userAgent)
+                            setRequestProperty("Origin", session.origin)
+                            setRequestProperty("Referer", session.origin + "/")
+                            setRequestProperty("Accept", "*/*")
+                            range?.let { setRequestProperty("Range", it) }
+                        }
+                        conn = current
+                        val status = current.responseCode
+                        if (status in 300..399) {
+                            val location = current.getHeaderField("Location") ?: error("Redirect without location")
+                            url = signedUrl(url, location, session)
+                            current.disconnect()
+                        } else break
+                    }
+                    val response = conn ?: error("No upstream")
+                    val status = response.responseCode
+                    val contentType = response.contentType.orEmpty()
+                    val isPlaylist = status == 200 && range == null &&
+                        (contentType.contains("mpegurl", true) || url.substringBefore('?').endsWith(".json"))
+                    if (isPlaylist) {
+                        val bytes = response.inputStream.use { it.readBytes() }
+                        require(bytes.size <= 2_000_000) { "Playlist too large" }
+                        val text = bytes.toString(Charsets.UTF_8)
+                        if (text.trimStart().startsWith("#EXTM3U")) {
+                            val rewritten = rewritePlaylist(text, url, session, serverPort, parts[0])
+                                .toByteArray(Charsets.UTF_8)
+                            reply(out, 200, "OK", "application/vnd.apple.mpegurl", rewritten.size.toLong())
+                            if (method == "GET") out.write(rewritten)
+                        } else {
+                            reply(out, 502, "Bad Gateway", "text/plain", 0)
+                        }
+                    } else if (status == 200 || status == 206) {
+                        val size = response.contentLengthLong
+                        out.write(("HTTP/1.1 $status ${if (status == 206) "Partial Content" else "OK"}\r\n" +
+                            "Content-Type: ${contentType.ifBlank { "application/octet-stream" }}\r\n" +
+                            (if (size >= 0) "Content-Length: $size\r\n" else "") +
+                            (response.getHeaderField("Content-Range")?.let { "Content-Range: $it\r\n" } ?: "") +
+                            "Accept-Ranges: bytes\r\nConnection: close\r\n\r\n")
+                            .toByteArray(Charsets.US_ASCII))
+                        if (method == "GET") response.inputStream.use { it.copyTo(out, 64 * 1024) }
+                    } else {
+                        android.util.Log.e("IDLIX_DEBUG", "[HLS_PROXY] upstream=$status")
+                        reply(out, 502, "Bad Gateway", "text/plain", 0)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("IDLIX_DEBUG", "[HLS_PROXY] error=${e.javaClass.simpleName}")
+                    try { reply(out, 502, "Bad Gateway", "text/plain", 0) } catch (_: Exception) { }
+                } finally {
+                    conn?.disconnect()
+                }
+            }
+        }
+
+        fun startProxy(master: String, origin: String): String {
+            val uri = java.net.URI(master)
+            require(allowed(uri) && uri.host == "e2e.majorplay.net" && !uri.rawQuery.isNullOrBlank())
+            synchronized(lock) {
+                if (serverPort == 0) {
+                    val server = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+                    serverPort = server.localPort
+                    Thread {
+                        while (!server.isClosed) {
+                            try {
+                                val socket = server.accept()
+                                Thread { handle(socket) }.apply { isDaemon = true; start() }
+                            } catch (_: Exception) { break }
+                        }
+                    }.apply { isDaemon = true; name = "IDLIX-HLS-Proxy"; start() }
+                }
+                sessions.entries.removeIf { System.currentTimeMillis() - it.value.created > 3_600_000L }
+                val sid = java.util.UUID.randomUUID().toString().replace("-", "")
+                val session = HlsSession(origin, uri.rawQuery)
+                sessions[sid] = session
+                return "http://127.0.0.1:$serverPort/$sid/${session.register(master)}"
+            }
+        }
+    }
+
     private fun idlixLog(stage: String, message: String) {
         android.util.Log.e("IDLIX_DEBUG", "[$stage] $message")
     }
@@ -500,6 +675,11 @@ class Idlix : MainAPI() {
                     )
                     idlixLog("REDEEM_TIME", "ms=${System.currentTimeMillis() - redeemStart} HTTP=${redeemHttp.code}")
             val response = JSONObject(redeemHttp.text)
+                    idlixLog(
+                        "REDEEM_KEYS",
+                        "fields=" + response.keys().asSequence().toList().joinToString(",")
+                    )
+
                     if (redeemHttp.code != 200) {
                         idlixLog(
                             "REDEEM_ERROR",
@@ -529,50 +709,6 @@ class Idlix : MainAPI() {
                         interceptor = cfKiller
                     )
 
-
-                                // Diagnostic: test child HLS playlists without exposing signed URLs.
-                                if (configHttp.code == 200 && configHttp.text.trimStart().startsWith("#EXTM3U")) {
-                                    val masterUri = java.net.URI(configHttp.url)
-                                    val masterBody = configHttp.text
-
-                                    val audioPath = Regex("""#EXT-X-MEDIA:TYPE=AUDIO[^\\r\\n]*URI="([^"]+)"""")
-                                        .find(masterBody)?.groupValues?.get(1)
-
-                                    val videoPath = masterBody.lines()
-                                        .map { it.trim() }
-                                        .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
-
-                                    for ((kind, path) in listOf(
-                                        "audio" to audioPath,
-                                        "video" to videoPath
-                                    )) {
-                                        if (path.isNullOrBlank()) {
-                                            idlixLog("MP_CHILD", "kind=$kind found=false")
-                                            continue
-                                        }
-
-                                        try {
-                                            val childUri = masterUri.resolve(path)
-                                            val childHttp = app.get(
-                                                childUri.toString(),
-                                                headers = apiHeaders + mapOf("Referer" to "$mainUrl/"),
-                                                interceptor = cfKiller
-                                            )
-                                            val childBody = childHttp.text.trimStart()
-                                            idlixLog(
-                                                "MP_CHILD",
-                                                "kind=$kind status=${childHttp.code} " +
-                                                    "host=${childUri.host} " +
-                                                    "hasQuery=${childUri.rawQuery != null} " +
-                                                    "bytes=${childHttp.text.length} " +
-                                                    "isHls=${childBody.startsWith("#EXTM3U")} " +
-                                                    "isHtml=${childBody.startsWith("<")}"
-                                            )
-                                        } catch (e: Exception) {
-                                            idlixLog("MP_CHILD", "kind=$kind error=${e.javaClass.simpleName}")
-                                        }
-                                    }
-                                }
 
                                 val body = configHttp.text
                     val trimmed = body.trimStart()
@@ -659,7 +795,7 @@ class Idlix : MainAPI() {
                             newExtractorLink(
                                 "IDLIX",
                                 "IDLIX",
-                                stream,
+                                if (java.net.URI(stream).host == "e2e.majorplay.net") startProxy(stream, mainUrl) else stream,
                                 type = ExtractorLinkType.M3U8
                             ) {
                                 referer = "$mainUrl/"
