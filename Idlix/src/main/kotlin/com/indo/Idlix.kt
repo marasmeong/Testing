@@ -341,6 +341,7 @@ class Idlix : MainAPI() {
             }
         }
 
+        idlixLog("FALLBACK_RESULT", "found=$found")
         return found
     }
 
@@ -375,11 +376,14 @@ class Idlix : MainAPI() {
 
         try {
             idlixLog("PAGE", "Request started")
+            val pageStart = System.currentTimeMillis()
             val page = app.get(pageUrl, interceptor = cfKiller)
+            idlixLog("PAGE_HTTP", "HTTP=${page.code} ms=${System.currentTimeMillis() - pageStart}")
             val did = Regex("""\bdid=([^;]+)""")
                 .find(page.headers.values("Set-Cookie").joinToString("; "))
                 ?.groupValues?.getOrNull(1)
 
+            idlixLog("SESSION", "didCookie=${!did.isNullOrBlank()}")
             if (!did.isNullOrBlank()) {
                 cookies = mapOf("Cookie" to "did=$did")
             }
@@ -396,13 +400,14 @@ class Idlix : MainAPI() {
                 mapOf("Referer" to "$pageUrl/") + cookies
 
             idlixLog("DETAIL", "Request started")
-            val detail = JSONObject(
-                app.get(
-                    "$mainUrl/$apiPath",
-                    headers = headers,
-                    interceptor = cfKiller
-                ).text
+            val detailStart = System.currentTimeMillis()
+            val detailHttp = app.get(
+                "$mainUrl/$apiPath",
+                headers = headers,
+                interceptor = cfKiller
             )
+            idlixLog("DETAIL_HTTP", "HTTP=${detailHttp.code} ms=${System.currentTimeMillis() - detailStart} bytes=${detailHttp.text.length}")
+            val detail = JSONObject(detailHttp.text)
 
             val contentId = detail.optJSONObject("episode")
                 ?.optString("id")
@@ -418,13 +423,14 @@ class Idlix : MainAPI() {
             }
 
             idlixLog("PLAY_INFO", "Request started")
-            val info = JSONObject(
-                app.get(
-                    "$mainUrl/api/watch/play-info/$contentType/$contentId",
-                    headers = headers,
-                    interceptor = cfKiller
-                ).text
+            val infoStart = System.currentTimeMillis()
+            val infoHttp = app.get(
+                "$mainUrl/api/watch/play-info/$contentType/$contentId",
+                headers = headers,
+                interceptor = cfKiller
             )
+            idlixLog("PLAY_INFO_HTTP", "HTTP=${infoHttp.code} ms=${System.currentTimeMillis() - infoStart} bytes=${infoHttp.text.length}")
+            val info = JSONObject(infoHttp.text)
 
             val token = info.optString("gateToken")
             idlixLog("GATE", "kind=${info.optString("kind")} tokenAvailable=${token.isNotBlank()}")
@@ -436,14 +442,18 @@ class Idlix : MainAPI() {
                 val wait = if (unlock > 0 && now > 0)
                     unlock - now else 15000L
 
-                if (wait > 0) delay(wait + 2000L)
+                idlixLog("GATE_WAIT", "waitMs=${if (wait > 0) wait + 2000L else 0L}")
+            if (wait > 0) delay(wait + 2000L)
             }
 
             idlixLog("CLAIM", "Request started")
+            val claimStart = System.currentTimeMillis()
             var claim = postClaim(token, pageUrl, cookies)
+            idlixLog("CLAIM_TIME", "ms=${System.currentTimeMillis() - claimStart}")
 
             if (claim.optString("kind") == "pending") {
                 val remaining = claim.optLong("remainingMs")
+            idlixLog("CLAIM_PENDING", "remainingMs=$remaining")
                 if (remaining > 0) delay(remaining + 2000L)
                 claim = postClaim(token, pageUrl, cookies)
             }
@@ -451,6 +461,7 @@ class Idlix : MainAPI() {
             idlixLog("CLAIM", "kind=${claim.optString("kind")}")
             val redeemUrl = claim.optString("redeemUrl")
             val claimToken = claim.optString("claim")
+            idlixLog("CLAIM_FIELDS", "redeemAvailable=${redeemUrl.isNotBlank()} claimAvailable=${claimToken.isNotBlank()} initialAvailable=${claim.optString("initialMasterUrl").isNotBlank()}")
             android.util.Log.e(
                 "IDLIX_DEBUG",
                 "Redeem path=${java.net.URI(redeemUrl).path}, " +
@@ -465,13 +476,15 @@ class Idlix : MainAPI() {
             if (redeemUrl.isNotBlank() && claimToken.isNotBlank()) {
                 try {
                     idlixLog("REDEEM", "Request started")
+            val redeemStart = System.currentTimeMillis()
             val redeemHttp = app.post(
                             java.net.URI("$mainUrl/").resolve("/api" + redeemUrl).toString(),
-                            headers = mapOf(
+                            headers = apiHeaders + mapOf(
                                 "Origin" to mainUrl,
-                                "Referer" to "$mainUrl/",
+                                "Referer" to "$pageUrl/",
                                 "Content-Type" to "application/json"
-                            ),
+                            ) + cookies,
+                            interceptor = cfKiller,
                             json = JsonAsString(
                                 JSONObject()
                                     .put("claim", claimToken)
@@ -484,7 +497,8 @@ class Idlix : MainAPI() {
                         "Content-Type=${redeemHttp.headers["Content-Type"]}, " +
                         "Length=${redeemHttp.text.length}"
                     )
-                    val response = JSONObject(redeemHttp.text)
+                    idlixLog("REDEEM_TIME", "ms=${System.currentTimeMillis() - redeemStart} HTTP=${redeemHttp.code}")
+            val response = JSONObject(redeemHttp.text)
                     if (redeemHttp.code != 200) {
                         idlixLog(
                             "REDEEM_ERROR",
@@ -501,6 +515,7 @@ class Idlix : MainAPI() {
             idlixLog("SUBTITLE", "count=${response.optJSONArray("subtitles")?.length() ?: 0}")
 
                     if (stream.isNotBlank()) {
+                        idlixLog("PLAYBACK_RESULT", "source=redeem emitted=true")
                         response.optJSONArray("subtitles")?.let { subs ->
                             for (i in 0 until subs.length()) {
                                 val sub = subs.optJSONObject(i) ?: continue
@@ -534,6 +549,7 @@ class Idlix : MainAPI() {
             idlixLog("INITIAL", "available=${claim.optString("initialMasterUrl").isNotBlank()}")
             val initial = claim.optString("initialMasterUrl")
             if (initial.isNotBlank()) {
+                idlixLog("INITIAL_RESULT", "emitted=true")
                 callback(
                     newExtractorLink(
                         "IDLIX",
@@ -576,7 +592,9 @@ class Idlix : MainAPI() {
         )
 
         idlixLog("CLAIM_HTTP", "HTTP=${response.code} type=${response.headers["Content-Type"]}")
-            return JSONObject(response.text)
+            val result = JSONObject(response.text)
+        idlixLog("CLAIM_RESPONSE", "kind=${result.optString("kind")} hasClaim=${result.optString("claim").isNotBlank()} hasRedeem=${result.optString("redeemUrl").isNotBlank()} errorPresent=${result.has("error")}")
+        return result
     }
 
 
