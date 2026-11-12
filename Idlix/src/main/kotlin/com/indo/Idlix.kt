@@ -6,7 +6,20 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
 
+import com.lagradost.cloudstream3.network.CloudflareKiller
+import com.lagradost.nicehttp.JsonAsString
+import kotlinx.coroutines.delay
+import org.json.JSONObject
+
 class Idlix : MainAPI() {
+    private val cfKiller = CloudflareKiller()
+
+    private val apiHeaders
+        get() = mapOf(
+            "Accept" to "application/json",
+            "Referer" to "$mainUrl/"
+        )
+
     private val posterCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val posterSemaphore = kotlinx.coroutines.sync.Semaphore(8)
 
@@ -276,5 +289,248 @@ class Idlix : MainAPI() {
 
         return episodes.toSortedMap().map { it.key to it.value }
     }
+
+
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (tryLoadFromApi(data, subtitleCallback, callback)) return true
+
+        val html = try {
+            app.get(data, interceptor = cfKiller).text
+                .replace("\\\"", "\"")
+        } catch (_: Exception) {
+            return false
+        }
+
+        var found = false
+        val patterns = listOf(
+            Regex("""sources":\[([^\]]+)\]"""),
+            Regex("""playlist":\[([^\]]+)\]"""),
+            Regex("""playerSources":\[([^\]]+)\]""")
+        )
+
+        for (pattern in patterns) {
+            val content = pattern.find(html)?.groupValues?.get(1) ?: continue
+
+            val urls = Regex("""https?://[^\s"',]+\.(?:m3u8|mp4)[^\s"',]*""")
+                .findAll(content)
+
+            for (match in urls) {
+                val url = match.value
+                callback(
+                    newExtractorLink(
+                        "IDLIX",
+                        "IDLIX",
+                        url,
+                        type = if (url.contains(".m3u8"))
+                            ExtractorLinkType.M3U8
+                        else ExtractorLinkType.VIDEO
+                    ) {
+                        referer = "$mainUrl/"
+                    }
+                )
+                found = true
+            }
+        }
+
+        return found
+    }
+
+    private suspend fun tryLoadFromApi(
+        data: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val episode = Regex(
+            """/series/([^/]+)/season/(\d+)/episode/(\d+)"""
+        ).find(data)
+
+        val isEpisode = episode != null
+        val isSeries = data.contains("/series/")
+
+        val slug = when {
+            isEpisode -> episode!!.groupValues[1]
+            isSeries -> data.substringAfter("/series/").substringBefore("/")
+            else -> data.substringAfter("/movie/").substringBefore("/")
+        }.substringBefore("?")
+
+        if (slug.isBlank() || slug.startsWith("http")) return false
+
+        val pageUrl = when {
+            isEpisode -> "$mainUrl/series/$slug/season/${episode!!.groupValues[2]}/episode/${episode.groupValues[3]}"
+            isSeries -> "$mainUrl/series/$slug"
+            else -> "$mainUrl/movie/$slug"
+        }
+
+        var cookies = emptyMap<String, String>()
+
+        try {
+            val page = app.get(pageUrl, interceptor = cfKiller)
+            val did = Regex("""\bdid=([^;]+)""")
+                .find(page.headers["set-cookie"].orEmpty())
+                ?.groupValues?.getOrNull(1)
+
+            if (!did.isNullOrBlank()) {
+                cookies = mapOf("Cookie" to "did=$did")
+            }
+        } catch (_: Exception) {}
+
+        return try {
+            val apiPath = when {
+                isEpisode -> "api/series/$slug/season/${episode!!.groupValues[2]}/episode/${episode.groupValues[3]}"
+                isSeries -> "api/series/$slug"
+                else -> "api/movies/$slug"
+            }
+
+            val headers = apiHeaders +
+                mapOf("Referer" to "$pageUrl/") + cookies
+
+            val detail = JSONObject(
+                app.get(
+                    "$mainUrl/$apiPath",
+                    headers = headers,
+                    interceptor = cfKiller
+                ).text
+            )
+
+            val contentId = detail.optJSONObject("episode")
+                ?.optString("id")
+                ?.takeIf { it.isNotBlank() }
+                ?: detail.optString("id")
+
+            if (contentId.isBlank()) return false
+
+            val contentType = when {
+                isEpisode -> "episode"
+                isSeries -> "tv_series"
+                else -> "movie"
+            }
+
+            val info = JSONObject(
+                app.get(
+                    "$mainUrl/api/watch/play-info/$contentType/$contentId",
+                    headers = headers,
+                    interceptor = cfKiller
+                ).text
+            )
+
+            val token = info.optString("gateToken")
+            if (token.isBlank()) return false
+
+            if (info.optString("kind") == "gate") {
+                val unlock = info.optLong("unlockAt")
+                val now = info.optLong("serverNow")
+                val wait = if (unlock > 0 && now > 0)
+                    unlock - now else 15000L
+
+                if (wait > 0) delay(wait + 2000L)
+            }
+
+            var claim = postClaim(token, pageUrl, cookies)
+
+            if (claim.optString("kind") == "pending") {
+                val remaining = claim.optLong("remainingMs")
+                if (remaining > 0) delay(remaining + 2000L)
+                claim = postClaim(token, pageUrl, cookies)
+            }
+
+            val redeemUrl = claim.optString("redeemUrl")
+            val claimToken = claim.optString("claim")
+
+            if (redeemUrl.isNotBlank() && claimToken.isNotBlank()) {
+                try {
+                    val response = JSONObject(
+                        app.post(
+                            redeemUrl,
+                            headers = mapOf(
+                                "Origin" to mainUrl,
+                                "Referer" to "$mainUrl/",
+                                "Content-Type" to "application/json"
+                            ),
+                            json = JsonAsString(
+                                JSONObject()
+                                    .put("claim", claimToken)
+                                    .toString()
+                            )
+                        ).text
+                    )
+
+                    val stream = response.optString("url")
+
+                    if (stream.isNotBlank()) {
+                        response.optJSONArray("subtitles")?.let { subs ->
+                            for (i in 0 until subs.length()) {
+                                val sub = subs.optJSONObject(i) ?: continue
+                                val label = sub.optString("label")
+                                    .ifBlank { sub.optString("lang") }
+                                val path = sub.optString("path")
+
+                                if (label.isNotBlank() && path.isNotBlank()) {
+                                    subtitleCallback(newSubtitleFile(label, path))
+                                }
+                            }
+                        }
+
+                        callback(
+                            newExtractorLink(
+                                "IDLIX",
+                                "IDLIX",
+                                stream,
+                                type = ExtractorLinkType.M3U8
+                            ) {
+                                referer = "$mainUrl/"
+                            }
+                        )
+                        return true
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val initial = claim.optString("initialMasterUrl")
+            if (initial.isNotBlank()) {
+                callback(
+                    newExtractorLink(
+                        "IDLIX",
+                        "IDLIX",
+                        initial,
+                        type = ExtractorLinkType.M3U8
+                    ) {
+                        referer = "$mainUrl/"
+                    }
+                )
+                return true
+            }
+
+            false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private suspend fun postClaim(
+        token: String,
+        pageUrl: String,
+        cookies: Map<String, String>
+    ): JSONObject {
+        val response = app.post(
+            "$mainUrl/api/watch/session/claim",
+            headers = apiHeaders + mapOf(
+                "Origin" to mainUrl,
+                "Referer" to "$pageUrl/",
+                "Content-Type" to "application/json"
+            ) + cookies,
+            json = JsonAsString(
+                JSONObject().put("gateToken", token).toString()
+            ),
+            interceptor = cfKiller
+        )
+
+        return JSONObject(response.text)
+    }
+
 
 }
