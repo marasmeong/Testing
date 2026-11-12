@@ -4,8 +4,16 @@ import android.util.Base64
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import java.net.URLEncoder
+import kotlinx.coroutines.async
 
 class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
+    private fun getTmdbToken(): String {
+        return context.getSharedPreferences(
+            "cloudbhadoo_tmdb",
+            android.content.Context.MODE_PRIVATE
+        ).getString("read_token", "")?.trim().orEmpty()
+    }
+
     private fun getSubsourceKey(): String {
         return context.getSharedPreferences(
             "cloudbhadoo_subsource",
@@ -118,12 +126,144 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             .replace(Regex("\\s+"), " ")
             .trim()
 
-    private fun toSearchResponse(file: VideoFile): SearchResponse =
-        newMovieSearchResponse(
+    private fun tmdbTitle(filename: String): String {
+        val clean = title(filename)
+        return clean.split(
+            Regex(
+                """(?i)\\s+(?:19\\d{2}|20\\d{2}|2160p|1080p|720p|480p|WEB-DL|WEBRip|BluRay|BRRip|DVDRip|HDTV|x264|x265|HEVC|H264|H265|S\\d{1,2}E\\d{1,2})\\b"""
+            ),
+            limit = 2
+        ).first().trim()
+    }
+
+
+    private data class TmdbMovie(
+        val title: String,
+        val poster: String?,
+        val backdrop: String?,
+        val overview: String,
+        val rating: Double,
+        val year: Int?,
+        val genres: List<String>
+    )
+
+    private val tmdbCache = java.util.concurrent.ConcurrentHashMap<String, TmdbMovie>()
+
+    private suspend fun getTmdbMovie(filename: String): TmdbMovie? {
+        val token = getTmdbToken()
+        if (token.isBlank()) {
+            android.util.Log.d("CloudBHADOO", "TMDB token belum diatur")
+            return null
+        }
+
+        val clean = title(filename)
+        val year = Regex("""\b(?:19|20)\d{2}\b""")
+            .find(clean)?.value?.toIntOrNull()
+
+        val query = clean
+            .replace(
+                Regex("""(?i)\b(?:19\d{2}|20\d{2}|2160p|1080p|720p|480p|WEB-DL|WEBRip|BluRay|BRRip|DVDRip|HDTV|x264|x265|HEVC|H264|H265)\b.*"""),
+                ""
+            )
+            .trim()
+
+        if (query.isBlank()) return null
+
+        val cacheKey = "$query:$year"
+        tmdbCache[cacheKey]?.let { return it }
+
+        return try {
+            val encoded = URLEncoder.encode(query, "UTF-8")
+            val yearParam = year?.let { "&year=$it" }.orEmpty()
+
+            val response = app.get(
+                "https://api.themoviedb.org/3/search/movie?query=$encoded$yearParam&language=id-ID",
+                headers = mapOf(
+                    "Authorization" to "Bearer $token",
+                    "Accept" to "application/json"
+                )
+            )
+
+            val results = org.json.JSONObject(response.text)
+                .optJSONArray("results") ?: return null
+
+            val movie = results.optJSONObject(0) ?: return null
+            val id = movie.optInt("id")
+            if (id <= 0) return null
+
+            val detailResponse = app.get(
+                "https://api.themoviedb.org/3/movie/$id?language=id-ID",
+                headers = mapOf(
+                    "Authorization" to "Bearer $token",
+                    "Accept" to "application/json"
+                )
+            )
+
+            val detail = org.json.JSONObject(detailResponse.text)
+            val posterPath = detail.optString("poster_path")
+            val backdropPath = detail.optString("backdrop_path")
+            val releaseDate = detail.optString("release_date")
+
+            val genreArray = detail.optJSONArray("genres")
+            val genres = mutableListOf<String>()
+            if (genreArray != null) {
+                for (i in 0 until genreArray.length()) {
+                    val genre = genreArray.optJSONObject(i)
+                        ?.optString("name").orEmpty()
+                    if (genre.isNotBlank()) genres.add(genre)
+                }
+            }
+
+            val result = TmdbMovie(
+                title = detail.optString("title", query),
+                poster = posterPath.takeIf { it.startsWith("/") }
+                    ?.let { "https://image.tmdb.org/t/p/w500$it" },
+                backdrop = backdropPath.takeIf { it.startsWith("/") }
+                    ?.let { "https://image.tmdb.org/t/p/w1280$it" },
+                overview = detail.optString("overview"),
+                rating = detail.optDouble("vote_average", 0.0),
+                year = releaseDate.take(4).toIntOrNull(),
+                genres = genres
+            )
+
+            tmdbCache[cacheKey] = result
+            android.util.Log.d(
+                "CloudBHADOO",
+                "TMDB metadata berhasil: id=$id"
+            )
+            result
+        } catch (e: Exception) {
+            android.util.Log.e(
+                "CloudBHADOO",
+                "TMDB metadata gagal: ${e.javaClass.simpleName}"
+            )
+            null
+        }
+    }
+
+    private suspend fun toSearchResponse(file: VideoFile): SearchResponse {
+        val metadata = getTmdbMovie(file.name)
+
+        return newMovieSearchResponse(
             title(file.name),
             fileUrl(file.name, file.id),
             TvType.Movie
-        )
+        ) {
+            posterUrl = metadata?.poster
+                ?: "$mainUrl/1:/Gambar/logodua.jpg"
+        }
+    }
+
+    private suspend fun toSearchResponses(
+        files: List<VideoFile>
+    ): List<SearchResponse> =
+        kotlinx.coroutines.coroutineScope {
+            files.map { file ->
+                async {
+                    toSearchResponse(file)
+                }
+            }.map { it.await() }
+        }
 
     override suspend fun getMainPage(
         page: Int,
@@ -133,7 +273,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             val (files, hasNext) = getFiles(page, request.data)
             return newHomePageResponse(
                 request.name,
-                files.map(::toSearchResponse),
+                toSearchResponses(files),
                 hasNext
             )
         }
@@ -145,7 +285,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             categories.add(
                 HomePageList(
                     "Semua Film",
-                    rootFiles.map(::toSearchResponse),
+                    toSearchResponses(rootFiles),
                     false
                 )
             )
@@ -158,7 +298,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                     categories.add(
                         HomePageList(
                             folder.name,
-                            videos.map(::toSearchResponse),
+                            toSearchResponses(videos),
                             false
                         )
                     )
@@ -176,18 +316,31 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             url.substringAfterLast("/"), "UTF-8"
         )
 
+        val metadata = getTmdbMovie(filename)
+        val fallbackPoster = "$mainUrl/1:/Gambar/logodua.jpg"
+
         return newMovieLoadResponse(
             title(filename),
             url,
             TvType.Movie,
             url
         ) {
-            posterUrl = "$mainUrl/1:/Gambar/logodua.jpg"
-            backgroundPosterUrl = "$mainUrl/1:/Gambar/logodua.jpg"
+            posterUrl = metadata?.poster ?: fallbackPoster
+            backgroundPosterUrl = metadata?.backdrop ?: fallbackPoster
+
+            plot = metadata?.overview
+                ?.takeIf { it.isNotBlank() }
+                ?: "Sinopsis belum tersedia."
+
+            year = metadata?.year
+
+            metadata?.let {
+                if (it.rating > 0.0) {
+                    score = Score.from10(it.rating)
+                }
+            }
         }
     }
-
-
 
     private suspend fun searchSubsourceMovie(
         videoName: String

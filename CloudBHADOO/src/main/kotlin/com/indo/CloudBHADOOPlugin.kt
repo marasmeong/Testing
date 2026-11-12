@@ -13,44 +13,50 @@ class CloudBHADOOPlugin : Plugin() {
         registerMainAPI(CloudBHADOO(context.applicationContext))
 
         openSettings = { ctx ->
-            val prefs = ctx.getSharedPreferences(
-                "cloudbhadoo_subsource",
-                Context.MODE_PRIVATE
+            val subPrefs = ctx.getSharedPreferences(
+                "cloudbhadoo_subsource", Context.MODE_PRIVATE
+            )
+            val tmdbPrefs = ctx.getSharedPreferences(
+                "cloudbhadoo_tmdb", Context.MODE_PRIVATE
             )
 
-            val input = EditText(ctx).apply {
-                hint = "API Key Subsource"
+            val layout = android.widget.LinearLayout(ctx).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(40, 20, 40, 20)
+            }
+
+            val subInput = EditText(ctx).apply {
+                hint = "Subsource API Key"
                 inputType = InputType.TYPE_CLASS_TEXT or
                     InputType.TYPE_TEXT_VARIATION_PASSWORD
                 setSingleLine(true)
-                setText(prefs.getString("api_key", ""))
-                setPadding(40, 30, 40, 30)
+                setText(subPrefs.getString("api_key", ""))
             }
+
+            val tmdbInput = EditText(ctx).apply {
+                hint = "TMDB Read Access Token"
+                inputType = InputType.TYPE_CLASS_TEXT or
+                    InputType.TYPE_TEXT_VARIATION_PASSWORD
+                setSingleLine(true)
+                setText(tmdbPrefs.getString("read_token", ""))
+            }
+
+            layout.addView(subInput)
+            layout.addView(tmdbInput)
 
             AlertDialog.Builder(ctx)
                 .setTitle("Pengaturan CloudBHADOO")
-                .setMessage("Masukkan API key Subsource untuk subtitle Indonesia otomatis.")
-                .setView(input)
+                .setView(layout)
                 .setPositiveButton("Simpan") { _, _ ->
-                    prefs.edit()
-                        .putString("api_key", input.text.toString().trim())
+                    subPrefs.edit()
+                        .putString("api_key", subInput.text.toString().trim())
+                        .apply()
+                    tmdbPrefs.edit()
+                        .putString("read_token", tmdbInput.text.toString().trim())
                         .apply()
                 }
                 .setNegativeButton("Batal", null)
-                .create().apply {
-                    setOnShowListener {
-                        getButton(AlertDialog.BUTTON_POSITIVE)
-                            .setTextColor(android.graphics.Color.WHITE)
-                        getButton(AlertDialog.BUTTON_NEGATIVE)
-                            .setTextColor(android.graphics.Color.WHITE)
-                    }
-                    show()
-                }.apply {
-                    getButton(AlertDialog.BUTTON_POSITIVE)
-                        .setTextColor(android.graphics.Color.WHITE)
-                    getButton(AlertDialog.BUTTON_NEGATIVE)
-                        .setTextColor(android.graphics.Color.WHITE)
-                }
+                .show()
         }
     }
 }
