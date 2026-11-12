@@ -311,9 +311,29 @@ class Idlix : MainAPI() {
             }
         }
 
-        private fun allowed(url: java.net.URI): Boolean =
-            url.scheme.equals("https", true) && url.host?.lowercase(java.util.Locale.ROOT) in permittedHosts &&
-                (url.port == -1 || url.port == 443) && url.userInfo == null
+        private fun allowed(url: java.net.URI): Boolean {
+            val host = url.host?.lowercase(java.util.Locale.ROOT) ?: return false
+            if (!url.scheme.equals("https", true) ||
+                (url.port != -1 && url.port != 443) ||
+                url.userInfo != null) return false
+
+            if (host in permittedHosts) return true
+
+            if (!host.startsWith("g7.") ||
+                !host.matches(Regex("""g7\.[a-z0-9-]+\.[a-z]{2,}"""))) return false
+
+            return try {
+                java.net.InetAddress.getAllByName(host).all { address ->
+                    !address.isAnyLocalAddress &&
+                    !address.isLoopbackAddress &&
+                    !address.isSiteLocalAddress &&
+                    !address.isLinkLocalAddress &&
+                    !address.isMulticastAddress
+                }
+            } catch (_: Exception) {
+                false
+            }
+        }
 
         private fun signedUrl(base: String, reference: String, session: HlsSession): String {
             val target = java.net.URI(base).resolve(reference)
