@@ -710,7 +710,7 @@ class Idlix : MainAPI() {
 
             idlixLog("SESSION", "didCookie=${!did.isNullOrBlank()}")
             val mergedCookies = linkedMapOf<String, String>()
-                loginCookies()["Cookie"]
+                emptyMap<String, String>()["Cookie"]
                     ?.split(";")
                     ?.forEach { part ->
                         val pair = part.trim().split("=", limit = 2)
