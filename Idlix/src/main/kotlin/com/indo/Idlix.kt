@@ -520,6 +520,7 @@ class Idlix : MainAPI() {
                     "host=${uri.host} path=${uri.path} hasQuery=${uri.query != null}"
                 )
             }
+
             if (stream.isNotBlank() && java.net.URI(stream).host == "e2e.majorplay.net") {
                 try {
                     val configHttp = app.get(
@@ -527,25 +528,71 @@ class Idlix : MainAPI() {
                         headers = apiHeaders + mapOf("Referer" to "$mainUrl/"),
                         interceptor = cfKiller
                     )
-                    idlixLog("MAJORPLAY_HTTP", "HTTP=${configHttp.code} bytes=${configHttp.text.length}")
-                    val config = org.json.JSONObject(configHttp.text)
-                    idlixLog("MAJORPLAY_KEYS", config.keys().asSequence().joinToString(","))
-                    config.keys().asSequence().forEach { key ->
-                        val value = config.opt(key)
-                        val kind = when (value) {
-                            is org.json.JSONObject -> "object"
-                            is org.json.JSONArray -> "array(${value.length()})"
-                            is String -> "string"
-                            is Number -> "number"
-                            is Boolean -> "boolean"
-                            else -> "null"
+
+                    val body = configHttp.text
+                    val trimmed = body.trimStart()
+                    val contentType = configHttp.headers["content-type"].orEmpty()
+                    val finalUri = java.net.URI(configHttp.url)
+
+                    idlixLog("MP_HTTP", "status=${configHttp.code} bytes=${body.length}")
+                    idlixLog("MP_HEADERS", "contentType=$contentType contentLength=${configHttp.headers["content-length"].orEmpty()}")
+                    idlixLog("MP_REDIRECT", "host=${finalUri.host} path=${finalUri.path} hasQuery=${finalUri.query != null}")
+                    idlixLog("MP_FORMAT", "jsonObject=${trimmed.startsWith("{")} jsonArray=${trimmed.startsWith("[")} html=${trimmed.startsWith("<")} empty=${trimmed.isEmpty()}")
+                    idlixLog("MP_MARKERS", "m3u8=${body.contains(".m3u8", true)} mp4=${body.contains(".mp4", true)} mpd=${body.contains(".mpd", true)} iframe=${body.contains("iframe", true)} source=${body.contains("source", true)} script=${body.contains("<script", true)}")
+                    idlixLog("MP_SECURITY", "cloudflare=${body.contains("cloudflare", true)} forbidden=${body.contains("forbidden", true)} expired=${body.contains("expired", true)} unauthorized=${body.contains("unauthorized", true)}")
+
+                    fun inspectJson(value: Any?, path: String, depth: Int = 0) {
+                        if (depth > 4) return
+                        when (value) {
+                            is org.json.JSONObject -> {
+                                val keys = value.keys().asSequence().toList()
+                                idlixLog("MP_OBJECT", "$path keys=${keys.joinToString(",")}")
+                                keys.take(30).forEach { key ->
+                                    inspectJson(value.opt(key), "$path.$key", depth + 1)
+                                }
+                            }
+                            is org.json.JSONArray -> {
+                                idlixLog("MP_ARRAY", "$path count=${value.length()}")
+                                for (i in 0 until minOf(value.length(), 3)) {
+                                    inspectJson(value.opt(i), "$path[$i]", depth + 1)
+                                }
+                            }
+                            is String -> {
+                                val uri = try {
+                                    java.net.URI(value)
+                                } catch (_: Exception) {
+                                    null
+                                }
+                                if (uri?.scheme == "https" || uri?.scheme == "http") {
+                                    idlixLog("MP_URL_FIELD", "$path host=${uri.host} path=${uri.path} hasQuery=${uri.query != null}")
+                                } else {
+                                    idlixLog("MP_STRING", "$path length=${value.length} m3u8=${value.contains(".m3u8", true)} mp4=${value.contains(".mp4", true)}")
+                                }
+                            }
+                            is Number -> idlixLog("MP_NUMBER", path)
+                            is Boolean -> idlixLog("MP_BOOLEAN", "$path=$value")
+                            else -> idlixLog("MP_NULL", path)
                         }
-                        idlixLog("MAJORPLAY_FIELD", "$key=$kind")
                     }
+
+                    try {
+                        inspectJson(org.json.JSONTokener(body).nextValue(), "root")
+                    } catch (e: Exception) {
+                        idlixLog("MP_PARSE", "failed=${e.javaClass.simpleName}")
+                    }
+
+                    val safePreview = trimmed.take(500)
+                        .replace(Regex("""https?://[^\s"'<>]+"""), "[URL]")
+                        .replace(Regex("""(?i)(token|secret|signature|authorization|claim|session|key|t)\s*[:=]\s*[^\s&,"'<>]+"""), "[REDACTED]")
+                        .replace(Regex("""[A-Za-z0-9_-]{24,}"""), "[LONG_VALUE]")
+
+                    idlixLog("MP_PREVIEW", safePreview.replace("\n", " ").replace("\r", " "))
+
                 } catch (e: Exception) {
-                    idlixLog("MAJORPLAY_ERROR", e.javaClass.simpleName)
+                    idlixLog("MP_ERROR", "${e.javaClass.simpleName}: ${e.message?.take(100)}")
                 }
             }
+
             idlixLog("SUBTITLE", "count=${response.optJSONArray("subtitles")?.length() ?: 0}")
 
                     if (stream.isNotBlank()) {
