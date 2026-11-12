@@ -328,7 +328,10 @@ class Idlix : MainAPI() {
                 host.endsWith(".")) return false
 
             val knownHost = host in permittedHosts
-            if (!knownHost) return false
+            val dynamicCdn = host.matches(
+                Regex("""g(?:5|7)\.[a-z0-9-]+\.[a-z]{2,}""")
+            )
+            if (!knownHost && !dynamicCdn) return false
 
             return try {
                 java.net.InetAddress.getAllByName(host).all { address ->
