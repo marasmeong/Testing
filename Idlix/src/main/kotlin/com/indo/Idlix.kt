@@ -735,7 +735,7 @@ class Idlix : MainAPI() {
 
             idlixLog("SESSION", "didCookie=${!did.isNullOrBlank()}")
             val mergedCookies = linkedMapOf<String, String>()
-                CookieManager.getInstance().getCookie(mainUrl)
+                emptyMap<String, String>()["Cookie"]
                 ?.split(";")
                 ?.mapNotNull { part ->
                     val pair = part.trim().split("=", limit = 2)
