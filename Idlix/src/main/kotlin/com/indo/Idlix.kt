@@ -485,6 +485,15 @@ class Idlix : MainAPI() {
                         "Length=${redeemHttp.text.length}"
                     )
                     val response = JSONObject(redeemHttp.text)
+                    if (redeemHttp.code != 200) {
+                        idlixLog(
+                            "REDEEM_ERROR",
+                            "HTTP=${redeemHttp.code} " +
+                            "error=${response.optString("error")} " +
+                            "message=${response.optString("message")} " +
+                            "code=${response.optString("code")}"
+                        )
+                    }
             idlixLog("REDEEM", "JSON parsed hasUrl=${response.optString("url").isNotBlank()}")
 
                     val stream = response.optString("url")
