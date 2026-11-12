@@ -152,6 +152,9 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
     private fun parseMedia(filename: String): MediaInfo {
         val clean = title(filename)
+            .replace(Regex("""(?i)\b(?:19|20)\d{2}\b""")) { it.value }
+            .replace(Regex("""\s+"""), " ")
+            .trim()
 
         val episodeMatch = Regex(
             """(?i)\bS(\d{1,2})E(\d{1,3})\b"""
@@ -201,7 +204,12 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val movieTitle = if (yearMatch != null) {
             clean.substring(0, yearMatch.range.first).trim()
         } else {
-            clean.split(quality, limit = 2).first().trim()
+            clean.split(quality, limit = 2).first()
+                .replace(
+                    Regex("""(?i)\b(?:NF|AMZN|DSNP|WEB|HDRip)\b.*"""),
+                    ""
+                )
+                .trim()
         }
 
         val year = yearMatch?.value?.toIntOrNull()
@@ -298,12 +306,22 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             val overview = if (media.isEpisode) {
                 episodeId?.optString("overview")
                     ?.takeIf { it.isNotBlank() }
-                    ?: episodeEn?.optString("overview").orEmpty()
+                    ?: episodeEn?.optString("overview")
+                        ?.takeIf { it.isNotBlank() }
+                    ?: detailId.optString("overview")
+                        .takeIf { it.isNotBlank() }
+                    ?: (detailEn ?: fetch(detailPath, "en-US"))
+                        .optString("overview")
             } else {
                 detailId.optString("overview")
                     .takeIf { it.isNotBlank() }
                     ?: detailEn?.optString("overview").orEmpty()
             }
+
+            android.util.Log.d(
+                "CloudBHADOO",
+                "TMDB overview: type=$kind id=$id length=${overview.length}"
+            )
 
             val genres = mutableListOf<String>()
             val genreArray = detailId.optJSONArray("genres")
@@ -460,6 +478,12 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 ?: "Sinopsis belum tersedia."
 
             year = metadata?.year
+
+            metadata?.genres
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { genreList ->
+                    plot = "Genre: ${genreList.joinToString(", ")}\n\n$plot"
+                }
 
             metadata?.let {
                 if (it.rating > 0.0) {
