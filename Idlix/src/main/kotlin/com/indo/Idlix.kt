@@ -329,7 +329,7 @@ class Idlix : MainAPI() {
 
             val knownHost = host in permittedHosts
             val dynamicCdn = host.matches(
-                Regex("""g(?:5|7)\.[a-z0-9-]+\.[a-z]{2,}""")
+                Regex("""g[0-9]+\.[a-z0-9-]+\.[a-z]{2,}""")
             )
             if (!knownHost && !dynamicCdn) return false
 
