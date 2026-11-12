@@ -137,6 +137,88 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     }
 
 
+
+    private data class MediaInfo(
+        val query: String,
+        val displayTitle: String,
+        val year: Int?,
+        val season: Int?,
+        val episode: Int?,
+        val episodeTitle: String?
+    ) {
+        val isEpisode: Boolean
+            get() = season != null && episode != null
+    }
+
+    private fun parseMedia(filename: String): MediaInfo {
+        val clean = title(filename)
+
+        val episodeMatch = Regex(
+            """(?i)\bS(\d{1,2})E(\d{1,3})\b"""
+        ).find(clean)
+
+        val quality = Regex(
+            """(?i)\b(?:2160p|1080p|720p|480p|WEB[- ]?DL|WEBRip|BluRay|BRRip|DVDRip|HDTV|x264|x265|HEVC|H264|H265)\b"""
+        )
+
+        if (episodeMatch != null) {
+            val series = clean.substring(
+                0, episodeMatch.range.first
+            ).trim()
+
+            val season = episodeMatch.groupValues[1].toInt()
+            val episode = episodeMatch.groupValues[2].toInt()
+
+            val remainder = clean.substring(
+                episodeMatch.range.last + 1
+            ).trim()
+
+            val episodeTitle = remainder
+                .split(quality, limit = 2)
+                .first()
+                .trim(' ', '-', '.')
+
+            val code = "S%02dE%02d".format(
+                java.util.Locale.ROOT, season, episode
+            )
+
+            return MediaInfo(
+                query = series,
+                displayTitle = listOf(
+                    code, episodeTitle
+                ).filter { it.isNotBlank() }.joinToString(" "),
+                year = null,
+                season = season,
+                episode = episode,
+                episodeTitle = episodeTitle.takeIf { it.isNotBlank() }
+            )
+        }
+
+        val yearMatch = Regex(
+            """\b(?:19|20)\d{2}\b"""
+        ).find(clean)
+
+        val movieTitle = if (yearMatch != null) {
+            clean.substring(0, yearMatch.range.first).trim()
+        } else {
+            clean.split(quality, limit = 2).first().trim()
+        }
+
+        val year = yearMatch?.value?.toIntOrNull()
+
+        return MediaInfo(
+            query = movieTitle,
+            displayTitle = listOfNotNull(
+                movieTitle,
+                year?.toString()
+            ).joinToString(" "),
+            year = year,
+            season = null,
+            episode = null,
+            episodeTitle = null
+        )
+    }
+
     private data class TmdbMovie(
         val title: String,
         val poster: String?,
@@ -156,86 +238,131 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             return null
         }
 
-        val clean = title(filename)
-        val year = Regex("""\b(?:19|20)\d{2}\b""")
-            .find(clean)?.value?.toIntOrNull()
+        val media = parseMedia(filename)
+        if (media.query.isBlank()) return null
 
-        val query = clean
-            .replace(
-                Regex("""(?i)\b(?:19\d{2}|20\d{2}|2160p|1080p|720p|480p|WEB-DL|WEBRip|BluRay|BRRip|DVDRip|HDTV|x264|x265|HEVC|H264|H265)\b.*"""),
-                ""
-            )
-            .trim()
-
-        if (query.isBlank()) return null
-
-        val cacheKey = "$query:$year"
+        val cacheKey = "${media.query}:${media.year}:${media.season}:${media.episode}"
         tmdbCache[cacheKey]?.let { return it }
 
-        return try {
-            val encoded = URLEncoder.encode(query, "UTF-8")
-            val yearParam = year?.let { "&year=$it" }.orEmpty()
+        val headers = mapOf(
+            "Authorization" to "Bearer $token",
+            "Accept" to "application/json"
+        )
 
+        suspend fun fetch(path: String, language: String): org.json.JSONObject {
+            val separator = if ('?' in path) "&" else "?"
             val response = app.get(
-                "https://api.themoviedb.org/3/search/movie?query=$encoded$yearParam&language=id-ID",
-                headers = mapOf(
-                    "Authorization" to "Bearer $token",
-                    "Accept" to "application/json"
-                )
+                "https://api.themoviedb.org/3/$path${separator}language=$language",
+                headers = headers
+            )
+            return org.json.JSONObject(response.text)
+        }
+
+        fun imageUrl(path: String?, size: String): String? =
+            path?.takeIf { it.startsWith("/") }
+                ?.let { "https://image.tmdb.org/t/p/$size$it" }
+
+        return try {
+            val kind = if (media.isEpisode) "tv" else "movie"
+            val query = URLEncoder.encode(media.query, "UTF-8")
+            val yearParam = media.year?.let {
+                if (kind == "movie") "&year=$it" else ""
+            }.orEmpty()
+
+            val search = fetch(
+                "search/$kind?query=$query$yearParam",
+                "en-US"
             )
 
-            val results = org.json.JSONObject(response.text)
-                .optJSONArray("results") ?: return null
-
-            val movie = results.optJSONObject(0) ?: return null
-            val id = movie.optInt("id")
+            val results = search.optJSONArray("results") ?: return null
+            val candidate = results.optJSONObject(0) ?: return null
+            val id = candidate.optInt("id")
             if (id <= 0) return null
 
-            val detailResponse = app.get(
-                "https://api.themoviedb.org/3/movie/$id?language=id-ID",
-                headers = mapOf(
-                    "Authorization" to "Bearer $token",
-                    "Accept" to "application/json"
-                )
-            )
+            val detailPath = "$kind/$id"
+            val detailId = fetch(detailPath, "id-ID")
+            val detailEn = if (detailId.optString("overview").isBlank()) {
+                fetch(detailPath, "en-US")
+            } else null
 
-            val detail = org.json.JSONObject(detailResponse.text)
-            val posterPath = detail.optString("poster_path")
-            val backdropPath = detail.optString("backdrop_path")
-            val releaseDate = detail.optString("release_date")
+            val episodePath = if (media.isEpisode) {
+                "tv/$id/season/${media.season}/episode/${media.episode}"
+            } else null
 
-            val genreArray = detail.optJSONArray("genres")
+            val episodeId = episodePath?.let { fetch(it, "id-ID") }
+            val episodeEn = if (
+                episodePath != null &&
+                episodeId?.optString("overview").isNullOrBlank()
+            ) fetch(episodePath, "en-US") else null
+
+            val overview = if (media.isEpisode) {
+                episodeId?.optString("overview")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: episodeEn?.optString("overview").orEmpty()
+            } else {
+                detailId.optString("overview")
+                    .takeIf { it.isNotBlank() }
+                    ?: detailEn?.optString("overview").orEmpty()
+            }
+
             val genres = mutableListOf<String>()
+            val genreArray = detailId.optJSONArray("genres")
             if (genreArray != null) {
                 for (i in 0 until genreArray.length()) {
-                    val genre = genreArray.optJSONObject(i)
+                    val name = genreArray.optJSONObject(i)
                         ?.optString("name").orEmpty()
-                    if (genre.isNotBlank()) genres.add(genre)
+                    if (name.isNotBlank()) genres.add(name)
                 }
             }
 
+            val poster = if (media.isEpisode) {
+                imageUrl(
+                    episodeId?.optString("still_path"),
+                    "w780"
+                ) ?: imageUrl(
+                    detailId.optString("backdrop_path"),
+                    "w780"
+                )
+            } else {
+                imageUrl(detailId.optString("poster_path"), "w500")
+            }
+
+            val backdrop = imageUrl(
+                detailId.optString("backdrop_path"), "w1280"
+            )
+
+            val releaseDate = if (media.isEpisode) {
+                episodeId?.optString("air_date").orEmpty()
+            } else {
+                detailId.optString("release_date")
+            }
+
             val result = TmdbMovie(
-                title = detail.optString("title", query),
-                poster = posterPath.takeIf { it.startsWith("/") }
-                    ?.let { "https://image.tmdb.org/t/p/w500$it" },
-                backdrop = backdropPath.takeIf { it.startsWith("/") }
-                    ?.let { "https://image.tmdb.org/t/p/w1280$it" },
-                overview = detail.optString("overview"),
-                rating = detail.optDouble("vote_average", 0.0),
+                title = media.displayTitle,
+                poster = poster,
+                backdrop = backdrop,
+                overview = overview,
+                rating = if (media.isEpisode) {
+                    episodeId?.optDouble("vote_average", 0.0) ?: 0.0
+                } else {
+                    detailId.optDouble("vote_average", 0.0)
+                },
                 year = releaseDate.take(4).toIntOrNull(),
                 genres = genres
             )
 
             tmdbCache[cacheKey] = result
+
             android.util.Log.d(
                 "CloudBHADOO",
-                "TMDB metadata berhasil: id=$id"
+                "TMDB sukses: type=$kind id=$id season=${media.season} episode=${media.episode} still=${poster != null}"
             )
+
             result
         } catch (e: Exception) {
             android.util.Log.e(
                 "CloudBHADOO",
-                "TMDB metadata gagal: ${e.javaClass.simpleName}"
+                "TMDB gagal: ${e.javaClass.simpleName}"
             )
             null
         }
@@ -245,7 +372,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val metadata = getTmdbMovie(file.name)
 
         return newMovieSearchResponse(
-            title(file.name),
+            parseMedia(file.name).displayTitle,
             fileUrl(file.name, file.id),
             TvType.Movie
         ) {
@@ -320,7 +447,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val fallbackPoster = "$mainUrl/1:/Gambar/logodua.jpg"
 
         return newMovieLoadResponse(
-            title(filename),
+            parseMedia(filename).displayTitle,
             url,
             TvType.Movie,
             url
