@@ -938,6 +938,53 @@ class Idlix : MainAPI() {
                     val finalUri = java.net.URI(configHttp.url)
 
                     idlixLog("MP_HTTP", "status=${configHttp.code} bytes=${body.length}")
+                    val niceVariants = body.lineSequence()
+                        .count { it.startsWith("#EXT-X-STREAM-INF:") }
+
+                    idlixLog(
+                        "MP_COMPARE",
+                        "client=nicehttp status=${configHttp.code} variants=$niceVariants"
+                    )
+
+                    try {
+                        val direct = (java.net.URI(stream).toURL()
+                            .openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 12000
+                            readTimeout = 12000
+                            instanceFollowRedirects = false
+                            setRequestProperty(
+                                "User-Agent",
+                                "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+                            )
+                            setRequestProperty("Origin", mainUrl)
+                            setRequestProperty("Referer", "$mainUrl/")
+                            setRequestProperty("Accept", "*/*")
+                            setRequestProperty("Accept-Encoding", "identity")
+                        }
+
+                        try {
+                            val status = direct.responseCode
+                            val directBody = if (status == 200) {
+                                direct.inputStream.bufferedReader().use { it.readText() }
+                            } else ""
+
+                            val directVariants = directBody.lineSequence()
+                                .count { it.startsWith("#EXT-X-STREAM-INF:") }
+
+                            idlixLog(
+                                "MP_COMPARE",
+                                "client=httpurlconnection status=$status variants=$directVariants"
+                            )
+                        } finally {
+                            direct.disconnect()
+                        }
+                    } catch (e: Exception) {
+                        idlixLog(
+                            "MP_COMPARE",
+                            "client=httpurlconnection error=${e.javaClass.simpleName}"
+                        )
+                    }
+
                     idlixLog("MP_HEADERS", "contentType=$contentType contentLength=${configHttp.headers["content-length"].orEmpty()}")
                     idlixLog("MP_REDIRECT", "host=${finalUri.host} path=${finalUri.path} hasQuery=${finalUri.query != null}")
                     idlixLog("MP_FORMAT", "jsonObject=${trimmed.startsWith("{")} jsonArray=${trimmed.startsWith("[")} html=${trimmed.startsWith("<")} empty=${trimmed.isEmpty()}")
