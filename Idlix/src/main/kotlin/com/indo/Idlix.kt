@@ -220,44 +220,16 @@ class Idlix : MainAPI() {
             }
         }
 
-        val details = document.select("dt").mapNotNull { dt ->
-            val key = dt.text().trim()
-            val value = dt.nextElementSibling()
-                ?.takeIf { it.tagName() == "dd" }
-                ?.text()?.trim()
+        val ratingText = document.select("dt")
+            .firstOrNull { it.text().trim() == "Rating" }
+            ?.nextElementSibling()
+            ?.text()
+            .orEmpty()
 
-            if (key.isNotBlank() && !value.isNullOrBlank()) {
-                key to value
-            } else null
-        }.toMap()
-
-        val movieInfo = mutableListOf<String>()
-
-        listOf(
-            "Rating", "Released", "Runtime",
-            "Country", "Language", "Director"
-        ).forEach { key ->
-            details[key]?.let { movieInfo.add("$key: $it") }
-        }
-
-        val tagline = document.select("article p")
-            .map { it.text().trim() }
-            .firstOrNull {
-                it.isNotBlank() &&
-                it != movie?.optString("description") &&
-                it.length < 150 &&
-                !it.startsWith("Watch ")
-            }
-
-        if (!tagline.isNullOrBlank()) {
-            movieInfo.add("Tagline: $tagline")
-        }
-
-        val fullPlot = (
-            movieInfo.joinToString("\n") +
-            "\n\n" +
-            movie?.optString("description").orEmpty()
-        ).trim()
+        val rating = Regex("""\d+(?:\.\d+)?""")
+            .find(ratingText)
+            ?.value
+            ?.toDoubleOrNull()
 
         return newMovieLoadResponse(
             title,
@@ -267,10 +239,11 @@ class Idlix : MainAPI() {
         ) {
             posterUrl = poster
             backgroundPosterUrl = backdrop
-            plot = fullPlot
+            plot = movie?.optString("description")
             this.year = year
             tags = genreList
             duration = minutes
+            this.score = Score.from10(rating)
         }
     }
 
