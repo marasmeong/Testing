@@ -565,9 +565,9 @@ class Idlix : MainAPI() {
                             val variants = text.lineSequence()
                                 .filter { it.startsWith("#EXT-X-STREAM-INF:") }
                                 .map { line ->
-                                    val resolution = Regex("""RESOLUTION=(\\d+x\\d+)""")
+                                    val resolution = Regex("""RESOLUTION=(\d+x\d+)""")
                                         .find(line)?.groupValues?.get(1) ?: "unknown"
-                                    val bandwidth = Regex("""BANDWIDTH=(\\d+)""")
+                                    val bandwidth = Regex("""BANDWIDTH=(\d+)""")
                                         .find(line)?.groupValues?.get(1) ?: "unknown"
                                     "$resolution bandwidth=$bandwidth"
                                 }.toList()
