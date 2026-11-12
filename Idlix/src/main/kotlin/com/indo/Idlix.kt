@@ -40,6 +40,17 @@ class Idlix : MainAPI() {
                 }
 
                 val manager = CookieManager.getInstance()
+                val cookieNames = manager.getCookie(mainUrl)
+                    .orEmpty()
+                    .split(";")
+                    .map { it.substringBefore("=").trim() }
+                    .toSet()
+                android.util.Log.e(
+                    "IDLIX_DEBUG",
+                    "[AUTH_COOKIE_CHECK] refreshToken=${"refresh_token" in cookieNames} " +
+                        "refreshRecovery=${"refresh_recovery" in cookieNames} " +
+                        "hasSession=${"has_session" in cookieNames}"
+                )
                 manager.setAcceptCookie(true)
                 manager.setAcceptThirdPartyCookies(webView, true)
 
