@@ -10,9 +10,115 @@ import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.nicehttp.JsonAsString
 import kotlinx.coroutines.delay
 import org.json.JSONObject
+import android.webkit.CookieManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.app.AlertDialog
+import com.lagradost.cloudstream3.CommonActivity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 class Idlix : MainAPI() {
     private val cfKiller = CloudflareKiller()
+
+
+    suspend fun openIdlixLoginWebView(): Boolean =
+        withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { continuation ->
+                val activity = CommonActivity.activity
+                if (activity == null || activity.isFinishing) {
+                    continuation.resume(false)
+                    return@suspendCancellableCoroutine
+                }
+
+                val webView = WebView(activity).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.userAgentString =
+                        "Mozilla/5.0 (Linux; Android 14; Mobile) " +
+                        "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                        "Chrome/130.0.0.0 Mobile Safari/537.36"
+                    webViewClient = WebViewClient()
+                }
+
+                val manager = CookieManager.getInstance()
+                manager.setAcceptCookie(true)
+                manager.setAcceptThirdPartyCookies(webView, true)
+
+                val layout = android.widget.LinearLayout(activity).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                }
+
+                val toolbar = android.widget.LinearLayout(activity).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                }
+
+                val back = android.widget.Button(activity).apply {
+                    text = "Kembali"
+                    setOnClickListener {
+                        if (webView.canGoBack()) webView.goBack()
+                    }
+                }
+
+                val done = android.widget.Button(activity).apply {
+                    text = "Selesai"
+                }
+
+                toolbar.addView(back)
+                toolbar.addView(done)
+                layout.addView(toolbar)
+                layout.addView(
+                    webView,
+                    android.widget.LinearLayout.LayoutParams(
+                        -1, 0, 1f
+                    )
+                )
+
+                val dialog = AlertDialog.Builder(activity)
+                    .setTitle("Login IDLIX")
+                    .setView(layout)
+                    .create()
+
+                var completed = false
+
+                fun finish(success: Boolean) {
+                    if (completed) return
+                    completed = true
+                    manager.flush()
+                    dialog.dismiss()
+                    webView.destroy()
+                    if (continuation.isActive) {
+                        continuation.resume(success)
+                    }
+                }
+
+                done.setOnClickListener {
+                    finish(!manager.getCookie(mainUrl).isNullOrBlank())
+                }
+
+                dialog.setOnCancelListener { finish(false) }
+                continuation.invokeOnCancellation {
+                    activity.runOnUiThread {
+                        if (!completed) finish(false)
+                    }
+                }
+
+                dialog.show()
+                webView.loadUrl(mainUrl)
+            }
+        }
+
+    private fun loginCookies(): Map<String, String> {
+        val cookie = runCatching {
+            CookieManager.getInstance().getCookie(mainUrl)
+        }.getOrNull()
+        return if (cookie.isNullOrBlank()) emptyMap()
+        else mapOf("Cookie" to cookie)
+    }
+
+
 
     private val apiHeaders
         get() = mapOf(
@@ -599,9 +705,25 @@ class Idlix : MainAPI() {
                 ?.groupValues?.getOrNull(1)
 
             idlixLog("SESSION", "didCookie=${!did.isNullOrBlank()}")
-            if (!did.isNullOrBlank()) {
-                cookies = mapOf("Cookie" to "did=$did")
-            }
+            val mergedCookies = linkedMapOf<String, String>()
+                loginCookies()["Cookie"]
+                    ?.split(";")
+                    ?.forEach { part ->
+                        val pair = part.trim().split("=", limit = 2)
+                        if (pair.size == 2 && pair[0].isNotBlank()) {
+                            mergedCookies[pair[0]] = pair[1]
+                        }
+                    }
+                if (!did.isNullOrBlank()) {
+                    mergedCookies["did"] = did
+                }
+                if (mergedCookies.isNotEmpty()) {
+                    cookies = mapOf(
+                        "Cookie" to mergedCookies.entries.joinToString("; ") {
+                            "${it.key}=${it.value}"
+                        }
+                    )
+                }
         } catch (_: Exception) {}
 
         return try {
