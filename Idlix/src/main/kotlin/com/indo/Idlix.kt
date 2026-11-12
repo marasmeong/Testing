@@ -618,6 +618,7 @@ class Idlix : MainAPI() {
                                 type = ExtractorLinkType.M3U8
                             ) {
                                 referer = "$mainUrl/"
+
                             }
                         )
                         return true
@@ -639,6 +640,7 @@ class Idlix : MainAPI() {
                         type = ExtractorLinkType.M3U8
                     ) {
                         referer = "$mainUrl/"
+
                     }
                 )
                 return true
