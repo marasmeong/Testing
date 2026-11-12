@@ -2,6 +2,9 @@ package com.indo
 
 import android.app.AlertDialog
 import android.content.Context
+import android.graphics.Color
+import android.graphics.Typeface
+import android.content.res.ColorStateList
 import android.text.InputType
 import android.widget.EditText
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
@@ -27,6 +30,9 @@ class CloudBHADOOPlugin : Plugin() {
 
             val subInput = EditText(ctx).apply {
                 hint = "Subsource API Key"
+                setTextColor(Color.WHITE)
+                setHintTextColor(Color.LTGRAY)
+                backgroundTintList = ColorStateList.valueOf(Color.WHITE)
                 inputType = InputType.TYPE_CLASS_TEXT or
                     InputType.TYPE_TEXT_VARIATION_PASSWORD
                 setSingleLine(true)
@@ -35,6 +41,9 @@ class CloudBHADOOPlugin : Plugin() {
 
             val tmdbInput = EditText(ctx).apply {
                 hint = "TMDB Read Access Token"
+                setTextColor(Color.WHITE)
+                setHintTextColor(Color.LTGRAY)
+                backgroundTintList = ColorStateList.valueOf(Color.WHITE)
                 inputType = InputType.TYPE_CLASS_TEXT or
                     InputType.TYPE_TEXT_VARIATION_PASSWORD
                 setSingleLine(true)
@@ -57,6 +66,21 @@ class CloudBHADOOPlugin : Plugin() {
                 }
                 .setNegativeButton("Batal", null)
                 .show()
+                .apply {
+                    getButton(AlertDialog.BUTTON_POSITIVE).apply {
+                            setTypeface(typeface, Typeface.BOLD)
+                        }
+                        .setTextColor(Color.WHITE)
+                    getButton(AlertDialog.BUTTON_NEGATIVE).apply {
+                            setTypeface(typeface, Typeface.BOLD)
+                        }
+                        .setTextColor(Color.WHITE)
+                    findViewById<android.widget.TextView>(
+                        ctx.resources.getIdentifier(
+                            "alertTitle", "id", "android"
+                        )
+                    )?.setTextColor(Color.WHITE)
+                }
         }
     }
 }

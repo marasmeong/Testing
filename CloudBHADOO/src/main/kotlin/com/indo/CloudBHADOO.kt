@@ -482,7 +482,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             metadata?.genres
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { genreList ->
-                    plot = "Genre: ${genreList.joinToString(", ")}\n\n$plot"
+                    tags = genreList
                 }
 
             metadata?.let {
