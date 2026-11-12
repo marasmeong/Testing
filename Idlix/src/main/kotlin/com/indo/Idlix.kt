@@ -298,7 +298,11 @@ class Idlix : MainAPI() {
         private val sessions = java.util.concurrent.ConcurrentHashMap<String, HlsSession>()
         private val userAgent = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
         private val permittedHosts = setOf(
-            "e2e.majorplay.net", "g7.akademivo.website", "g7.edubambu.store"
+            "e2e.majorplay.net",
+            "g5.akademivo.website",
+            "g7.akademivo.website",
+            "g7.edubambu.store",
+            "g7.aspireheightsacademy.digital"
         )
 
         private class HlsSession(val origin: String, val signedQuery: String) {
@@ -315,12 +319,16 @@ class Idlix : MainAPI() {
             val host = url.host?.lowercase(java.util.Locale.ROOT) ?: return false
             if (!url.scheme.equals("https", true) ||
                 (url.port != -1 && url.port != 443) ||
-                url.userInfo != null) return false
+                url.userInfo != null ||
+                url.rawFragment != null ||
+                host.length > 253 ||
+                !host.matches(Regex("""[a-z0-9.-]+""")) ||
+                host.contains("..") ||
+                host.startsWith(".") ||
+                host.endsWith(".")) return false
 
-            if (host in permittedHosts) return true
-
-            if (!host.startsWith("g7.") ||
-                !host.matches(Regex("""g7\.[a-z0-9-]+\.[a-z]{2,}"""))) return false
+            val knownHost = host in permittedHosts
+            if (!knownHost) return false
 
             return try {
                 java.net.InetAddress.getAllByName(host).all { address ->
@@ -428,8 +436,17 @@ class Idlix : MainAPI() {
                     val isPlaylist = status == 200 && range == null &&
                         (contentType.contains("mpegurl", true) || url.substringBefore('?').endsWith(".json"))
                     if (isPlaylist) {
-                        val bytes = response.inputStream.use { it.readBytes() }
-                        require(bytes.size <= 2_000_000) { "Playlist too large" }
+                        val bytes = response.inputStream.use { stream ->
+                            val buffer = ByteArray(8192)
+                            val output = java.io.ByteArrayOutputStream()
+                            while (true) {
+                                val count = stream.read(buffer)
+                                if (count == -1) break
+                                require(output.size() + count <= 2_000_000) { "Playlist too large" }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        }
                         val text = bytes.toString(Charsets.UTF_8)
                         if (text.trimStart().startsWith("#EXTM3U")) {
                             val rewritten = rewritePlaylist(text, url, session, serverPort, parts[0])
