@@ -291,6 +291,10 @@ class Idlix : MainAPI() {
     }
 
 
+    private fun idlixLog(stage: String, message: String) {
+        android.util.Log.e("IDLIX_DEBUG", "[$stage] $message")
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -345,7 +349,8 @@ class Idlix : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val episode = Regex(
+        idlixLog("API", "Playback started")
+            val episode = Regex(
             """/series/([^/]+)/season/(\d+)/episode/(\d+)"""
         ).find(data)
 
@@ -369,6 +374,7 @@ class Idlix : MainAPI() {
         var cookies = emptyMap<String, String>()
 
         try {
+            idlixLog("PAGE", "Request started")
             val page = app.get(pageUrl, interceptor = cfKiller)
             val did = Regex("""\bdid=([^;]+)""")
                 .find(page.headers.values("Set-Cookie").joinToString("; "))
@@ -389,6 +395,7 @@ class Idlix : MainAPI() {
             val headers = apiHeaders +
                 mapOf("Referer" to "$pageUrl/") + cookies
 
+            idlixLog("DETAIL", "Request started")
             val detail = JSONObject(
                 app.get(
                     "$mainUrl/$apiPath",
@@ -410,6 +417,7 @@ class Idlix : MainAPI() {
                 else -> "movie"
             }
 
+            idlixLog("PLAY_INFO", "Request started")
             val info = JSONObject(
                 app.get(
                     "$mainUrl/api/watch/play-info/$contentType/$contentId",
@@ -419,6 +427,7 @@ class Idlix : MainAPI() {
             )
 
             val token = info.optString("gateToken")
+            idlixLog("GATE", "kind=${info.optString("kind")} tokenAvailable=${token.isNotBlank()}")
             if (token.isBlank()) return false
 
             if (info.optString("kind") == "gate") {
@@ -430,6 +439,7 @@ class Idlix : MainAPI() {
                 if (wait > 0) delay(wait + 2000L)
             }
 
+            idlixLog("CLAIM", "Request started")
             var claim = postClaim(token, pageUrl, cookies)
 
             if (claim.optString("kind") == "pending") {
@@ -438,6 +448,7 @@ class Idlix : MainAPI() {
                 claim = postClaim(token, pageUrl, cookies)
             }
 
+            idlixLog("CLAIM", "kind=${claim.optString("kind")}")
             val redeemUrl = claim.optString("redeemUrl")
             val claimToken = claim.optString("claim")
             android.util.Log.e(
@@ -453,8 +464,9 @@ class Idlix : MainAPI() {
 
             if (redeemUrl.isNotBlank() && claimToken.isNotBlank()) {
                 try {
-                    val redeemHttp = app.post(
-                            java.net.URI("$mainUrl/").resolve(redeemUrl).toString(),
+                    idlixLog("REDEEM", "Request started")
+            val redeemHttp = app.post(
+                            java.net.URI("$mainUrl/").resolve("/api" + redeemUrl).toString(),
                             headers = mapOf(
                                 "Origin" to mainUrl,
                                 "Referer" to "$mainUrl/",
@@ -473,8 +485,11 @@ class Idlix : MainAPI() {
                         "Length=${redeemHttp.text.length}"
                     )
                     val response = JSONObject(redeemHttp.text)
+            idlixLog("REDEEM", "JSON parsed hasUrl=${response.optString("url").isNotBlank()}")
 
                     val stream = response.optString("url")
+            idlixLog("STREAM", "available=${stream.isNotBlank()} m3u8=${stream.contains(".m3u8")} mp4=${stream.contains(".mp4")}")
+            idlixLog("SUBTITLE", "count=${response.optJSONArray("subtitles")?.length() ?: 0}")
 
                     if (stream.isNotBlank()) {
                         response.optJSONArray("subtitles")?.let { subs ->
@@ -507,6 +522,7 @@ class Idlix : MainAPI() {
                 }
             }
 
+            idlixLog("INITIAL", "available=${claim.optString("initialMasterUrl").isNotBlank()}")
             val initial = claim.optString("initialMasterUrl")
             if (initial.isNotBlank()) {
                 callback(
@@ -550,7 +566,8 @@ class Idlix : MainAPI() {
             interceptor = cfKiller
         )
 
-        return JSONObject(response.text)
+        idlixLog("CLAIM_HTTP", "HTTP=${response.code} type=${response.headers["Content-Type"]}")
+            return JSONObject(response.text)
     }
 
 
