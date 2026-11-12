@@ -618,6 +618,11 @@ class Idlix : MainAPI() {
                                 type = ExtractorLinkType.M3U8
                             ) {
                                 referer = "$mainUrl/"
+                        this.headers = mapOf(
+                            "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                            "Referer" to "$mainUrl/",
+                            "Origin" to mainUrl
+                        )
 
                             }
                         )
@@ -640,6 +645,11 @@ class Idlix : MainAPI() {
                         type = ExtractorLinkType.M3U8
                     ) {
                         referer = "$mainUrl/"
+                        this.headers = mapOf(
+                            "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                            "Referer" to "$mainUrl/",
+                            "Origin" to mainUrl
+                        )
 
                     }
                 )
