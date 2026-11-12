@@ -487,7 +487,9 @@ class Idlix : MainAPI() {
                         )
                         return true
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.e("IDLIX_DEBUG", "Redeem failed: " + e.javaClass.simpleName)
+                }
             }
 
             val initial = claim.optString("initialMasterUrl")
@@ -506,7 +508,11 @@ class Idlix : MainAPI() {
             }
 
             false
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e(
+                "IDLIX_DEBUG",
+                "Playback API failed: " + e.javaClass.simpleName
+            )
             false
         }
     }
