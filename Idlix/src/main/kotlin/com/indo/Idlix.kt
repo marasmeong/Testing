@@ -904,6 +904,19 @@ class Idlix : MainAPI() {
             idlixLog("STREAM", "available=${stream.isNotBlank()} m3u8=${stream.contains(".m3u8")} mp4=${stream.contains(".mp4")}")
             if (stream.isNotBlank()) {
                 val uri = java.net.URI(stream)
+                val streamQuery = java.net.URI(stream).rawQuery.orEmpty()
+                val queryNames = streamQuery.split("&")
+                    .filter { it.isNotBlank() }
+                    .map { it.substringBefore("=") }
+                val playbackMode = streamQuery.split("&")
+                    .firstOrNull { it.substringBefore("=") == "pm" }
+                    ?.substringAfter("=", "")
+                    .orEmpty()
+                idlixLog(
+                    "STREAM_QUERY",
+                    "params=${queryNames.joinToString(",")} " +
+                    "pm=${if (playbackMode == "browser") "browser" else if (playbackMode.isBlank()) "missing" else "other"}"
+                )
                 idlixLog(
                     "STREAM_SHAPE",
                     "host=${uri.host} path=${uri.path} hasQuery=${uri.query != null}"
