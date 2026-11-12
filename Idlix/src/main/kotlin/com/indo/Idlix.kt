@@ -433,7 +433,7 @@ class Idlix : MainAPI() {
                         reply(out, 502, "Bad Gateway", "text/plain", 0)
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("IDLIX_DEBUG", "[HLS_PROXY] error=${e.javaClass.simpleName}")
+                    android.util.Log.e("IDLIX_DEBUG", "[HLS_PROXY] error=${e.javaClass.simpleName} at=${e.stackTrace.firstOrNull()?.let { "${it.className}:${it.lineNumber}" }}")
                     try { reply(out, 502, "Bad Gateway", "text/plain", 0) } catch (_: Exception) { }
                 } finally {
                     conn?.disconnect()
