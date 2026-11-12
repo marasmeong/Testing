@@ -371,7 +371,7 @@ class Idlix : MainAPI() {
         try {
             val page = app.get(pageUrl, interceptor = cfKiller)
             val did = Regex("""\bdid=([^;]+)""")
-                .find(page.headers["set-cookie"].orEmpty())
+                .find(page.headers.values("Set-Cookie").joinToString("; "))
                 ?.groupValues?.getOrNull(1)
 
             if (!did.isNullOrBlank()) {
