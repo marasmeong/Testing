@@ -317,7 +317,7 @@ class Idlix : MainAPI() {
 
         private fun signedUrl(base: String, reference: String, session: HlsSession): String {
             val target = java.net.URI(base).resolve(reference)
-            require(allowed(target)) { "HLS host not permitted" }
+            require(allowed(target)) { "HLS host not permitted: ${target.host}" }
             val query = target.rawQuery.orEmpty()
             val names = query.split('&').map { it.substringBefore('=') }.toSet()
             val inherited = session.signedQuery.split('&').filter {
@@ -433,7 +433,7 @@ class Idlix : MainAPI() {
                         reply(out, 502, "Bad Gateway", "text/plain", 0)
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("IDLIX_DEBUG", "[HLS_PROXY] error=${e.javaClass.simpleName} at=${e.stackTrace.firstOrNull()?.let { "${it.className}:${it.lineNumber}" }}")
+                    android.util.Log.e("IDLIX_DEBUG", "[HLS_PROXY] error=${e.javaClass.simpleName} message=${e.message} at=${e.stackTrace.firstOrNull()?.let { "${it.className}:${it.lineNumber}" }}")
                     try { reply(out, 502, "Bad Gateway", "text/plain", 0) } catch (_: Exception) { }
                 } finally {
                     conn?.disconnect()
