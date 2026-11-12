@@ -797,6 +797,10 @@ class Idlix : MainAPI() {
             idlixLog("PLAY_INFO_HTTP", "HTTP=${infoHttp.code} ms=${System.currentTimeMillis() - infoStart} bytes=${infoHttp.text.length}")
             val info = JSONObject(infoHttp.text)
 
+            idlixLog(
+                "PLAY_INFO_FIELDS",
+                "fields=" + info.keys().asSequence().toList().joinToString(",")
+            )
             val token = info.optString("gateToken")
             idlixLog("GATE", "kind=${info.optString("kind")} tokenAvailable=${token.isNotBlank()}")
             if (token.isBlank()) return false
