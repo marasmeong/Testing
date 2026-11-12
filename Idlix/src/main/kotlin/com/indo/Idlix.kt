@@ -445,7 +445,7 @@ class Idlix : MainAPI() {
                 try {
                     val response = JSONObject(
                         app.post(
-                            redeemUrl,
+                            java.net.URI("$mainUrl/").resolve(redeemUrl).toString(),
                             headers = mapOf(
                                 "Origin" to mainUrl,
                                 "Referer" to "$mainUrl/",
