@@ -488,6 +488,7 @@ class Idlix : MainAPI() {
                             json = JsonAsString(
                                 JSONObject()
                                     .put("claim", claimToken)
+                                    .put("mode", "browser")
                                     .toString()
                             )
                         )
