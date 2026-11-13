@@ -14,7 +14,11 @@ import android.widget.EditText
 class MeongCloudPlugin : Plugin() {
 
     override fun load(context: Context) {
-        registerMainAPI(MeongCloud(context.applicationContext))
+        registerMainAPI(Anichin())
+        registerMainAPI(AnimeXin())
+        registerMainAPI(CloudBHADOO(context.applicationContext))
+        registerMainAPI(Otakudesu())
+        registerMainAPI(Sokuja())
 
         openSettings = { ctx ->
             val subPrefs = ctx.getSharedPreferences(
