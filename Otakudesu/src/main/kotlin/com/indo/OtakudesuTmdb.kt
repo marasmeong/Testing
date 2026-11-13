@@ -13,6 +13,7 @@ internal data class OtakudesuTmdbInfo(
     val rating: Double?,
     val year: Int?,
     val genres: List<String>,
+    val tmdbId: Int,
     val mediaType: String
 )
 
@@ -292,6 +293,7 @@ internal class OtakudesuTmdb(
             )
 
             val info = OtakudesuTmdbInfo(
+                tmdbId = id,
                 title = details.optString(
                     "name",
                     details.optString("title", title)
