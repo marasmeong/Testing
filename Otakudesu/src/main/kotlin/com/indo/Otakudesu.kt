@@ -69,7 +69,7 @@ class Otakudesu(
                             ?.getOrNull(1)?.toIntOrNull()
 
                         val tmdb = tmdbMetadata.find(title)
-                        newAnimeSearchResponse(title, href, TvType.Anime) {
+                        newAnimeSearchResponse(tmdb?.title ?: title, href, TvType.Anime) {
                             this.posterUrl = tmdb?.poster
                             addSub(epNum)
                         }
@@ -95,7 +95,7 @@ class Otakudesu(
                             ?: return@withPermit null
 
                         val tmdb = tmdbMetadata.find(title)
-                        newAnimeSearchResponse(title, href, TvType.Anime) {
+                        newAnimeSearchResponse(tmdb?.title ?: title, href, TvType.Anime) {
                             this.posterUrl = tmdb?.poster
                         }
                     }

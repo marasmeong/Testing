@@ -43,6 +43,62 @@ internal class OtakudesuTmdb(
         return JSONObject(response.text)
     }
 
+
+    private fun tmdbSearchVariants(title: String): List<String> {
+        val roman = listOf(
+            "", "I", "II", "III", "IV", "V",
+            "VI", "VII", "VIII", "IX", "X"
+        )
+
+        val seasonPattern = Regex(
+            """(?i)\s+(?:season\s*|s)(\d{1,2}|I|II|III|IV|V|VI|VII|VIII|IX|X)$"""
+        )
+        val suffixPattern = Regex(
+            """(?i)\s+(X|IX|VIII|VII|VI|IV|V|III|II|I)$"""
+        )
+
+        val cleaned = title.replace(
+            Regex("""(?i)\s+(?:sub\s*indo|subtitle\s*indonesia)$"""),
+            ""
+        ).trim()
+
+        val seasonMatch = seasonPattern.find(cleaned)
+        val romanMatch = if (seasonMatch == null) {
+            suffixPattern.find(cleaned)
+        } else null
+
+        val season = when {
+            seasonMatch != null -> {
+                val value = seasonMatch.groupValues[1].uppercase()
+                value.toIntOrNull()
+                    ?: roman.indexOf(value).takeIf { it > 0 }
+            }
+            romanMatch != null ->
+                roman.indexOf(romanMatch.groupValues[1].uppercase())
+                    .takeIf { it > 0 }
+            else -> null
+        }
+
+        val base = when {
+            seasonMatch != null ->
+                cleaned.removeRange(seasonMatch.range).trim()
+            romanMatch != null ->
+                cleaned.removeRange(romanMatch.range).trim()
+            else -> cleaned
+        }
+
+        return buildList {
+            add(cleaned)
+            if (season != null && season in 1..10 && base.isNotBlank()) {
+                add("$base ${roman[season]}")
+                add("$base Season $season")
+                add("$base Season ${roman[season]}")
+                add("$base S$season")
+                add(base)
+            }
+        }.filter { it.isNotBlank() }.distinct()
+    }
+
     suspend fun find(title: String, year: Int? = null): OtakudesuTmdbInfo? {
         if (tokenProvider().isBlank()) return null
 
@@ -50,12 +106,14 @@ internal class OtakudesuTmdb(
         cache[key]?.let { return it }
 
         return try {
-            val query = URLEncoder.encode(title, "UTF-8")
-            val paths = listOf(
-                "search/multi?query=$query",
-                "search/tv?query=$query",
-                "search/movie?query=$query"
-            )
+            val queries = tmdbSearchVariants(title)
+            val paths = queries.flatMap { searchTitle ->
+                val query = URLEncoder.encode(searchTitle, "UTF-8")
+                listOf(
+                    "search/tv?query=$query",
+                    "search/movie?query=$query"
+                )
+            }
 
             val candidates = paths.flatMap { path ->
                 try {
@@ -68,58 +126,131 @@ internal class OtakudesuTmdb(
                 }
             }
 
-            val normalized = title.lowercase()
-                .replace(Regex("[^a-z0-9]"), "")
 
-            val best = candidates
+            // Pilih kandidat dari TMDB TV dan Movie.
+            // Batasi pemeriksaan judul alternatif agar tidak terlalu lambat.
+            val eligible = candidates
                 .filter {
                     val type = it.optString("media_type")
                     type.isBlank() || type == "tv" || type == "movie"
                 }
-                .maxByOrNull { item ->
-                    val candidateTitle = item.optString(
-                        "name",
-                        item.optString("title")
-                    )
-                    val candidate = candidateTitle.lowercase()
-                        .replace(Regex("[^a-z0-9]"), "")
+                .distinctBy {
+                    "${it.optString("media_type")}:${it.optInt("id")}"
+                }
+                .take(12)
 
-                    val titleScore = when {
-                        candidate == normalized -> 100
-                        candidate.contains(normalized) ||
-                            normalized.contains(candidate) -> 60
+            fun normalize(value: String): String =
+                value.lowercase().replace(Regex("[^a-z0-9]"), "")
+
+            val romanNumbers = listOf(
+                "", "I", "II", "III", "IV", "V",
+                "VI", "VII", "VIII", "IX", "X"
+            )
+
+            fun seasonInfo(value: String): Pair<String, Int?> {
+                val cleaned = value.trim()
+                val pattern = Regex(
+                    """(?i)\s+(?:(?:season\s*|s)(\d{1,2}|X|IX|VIII|VII|VI|IV|V|III|II|I)|(X|IX|VIII|VII|VI|IV|V|III|II|I))$"""
+                )
+                val match = pattern.find(cleaned)
+                    ?: return normalize(cleaned) to null
+
+                val number = match.groupValues[1]
+                    .ifBlank { match.groupValues[2] }
+                    .uppercase()
+
+                val season = number.toIntOrNull()
+                    ?: romanNumbers.indexOf(number).takeIf { it > 0 }
+
+                return normalize(
+                    cleaned.removeRange(match.range)
+                ) to season
+            }
+
+            val (sourceBase, sourceSeason) = seasonInfo(title)
+
+            suspend fun matchScore(item: JSONObject): Int {
+                val type = item.optString("media_type")
+                    .takeIf { it == "tv" || it == "movie" }
+                    ?: if (item.has("first_air_date")) "tv" else "movie"
+
+                val names = mutableListOf(
+                    item.optString("name"),
+                    item.optString("title"),
+                    item.optString("original_name"),
+                    item.optString("original_title")
+                )
+
+                val id = item.optInt("id")
+                if (id > 0) {
+                    try {
+                        val alt = request("$type/$id/alternative_titles")
+                        val entries = alt.optJSONArray(
+                            if (type == "tv") "results" else "titles"
+                        )
+                        for (i in 0 until (entries?.length() ?: 0)) {
+                            names.add(
+                                entries?.optJSONObject(i)
+                                    ?.optString("title").orEmpty()
+                            )
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                val titleScore = names.maxOfOrNull { candidate ->
+                    val (candidateBase, candidateSeason) =
+                        seasonInfo(candidate)
+
+                    val baseScore = when {
+                        sourceBase.isBlank() || candidateBase.isBlank() -> 0
+                        sourceBase == candidateBase -> 100
+                        sourceBase.length >= 5 &&
+                            candidateBase.length >= 5 &&
+                            (sourceBase.contains(candidateBase) ||
+                             candidateBase.contains(sourceBase)) -> 60
                         else -> 0
                     }
 
-                    val release = item.optString(
-                        "first_air_date",
-                        item.optString("release_date")
-                    )
-                    val candidateYear = release.take(4).toIntOrNull()
-                    val yearScore = if (
-                        year != null && candidateYear == year
-                    ) 20 else 0
-
-                    titleScore + yearScore
-                }?.takeIf { item ->
-                    val names = listOf(
-                        item.optString("name"),
-                        item.optString("title"),
-                        item.optString("original_name"),
-                        item.optString("original_title")
-                    )
-                    names.any { candidate ->
-                        val clean = candidate.lowercase()
-                            .replace(Regex("[^a-z0-9]"), "")
-                        normalized.isNotBlank() &&
-                            clean.isNotBlank() &&
-                            (clean == normalized ||
-                             (normalized.length >= 5 &&
-                              clean.length >= 5 &&
-                              (clean.contains(normalized) ||
-                               normalized.contains(clean))))
+                    when {
+                        baseScore == 0 -> 0
+                        sourceSeason != null &&
+                            candidateSeason != null &&
+                            sourceSeason != candidateSeason -> 0
+                        sourceSeason != null &&
+                            candidateSeason == sourceSeason -> baseScore + 30
+                        sourceSeason != null &&
+                            candidateSeason == null -> baseScore
+                        sourceSeason == null &&
+                            candidateSeason != null -> 0
+                        else -> baseScore
                     }
-                } ?: return null
+                } ?: 0
+
+                if (titleScore == 0) return 0
+
+                val release = item.optString(
+                    "first_air_date",
+                    item.optString("release_date")
+                )
+                val candidateYear = release.take(4).toIntOrNull()
+                val yearScore =
+                    if (year != null && candidateYear == year) 20 else 0
+
+                return titleScore + yearScore
+            }
+
+            var best: JSONObject? = null
+            var bestScore = 0
+
+            for (item in eligible) {
+                val score = matchScore(item)
+                if (score > bestScore) {
+                    bestScore = score
+                    best = item
+                }
+            }
+
+            best = best ?: return null
 
             val mediaType = best.optString("media_type")
                 .takeIf { it == "tv" || it == "movie" }
