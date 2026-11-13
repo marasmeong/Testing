@@ -24,8 +24,8 @@ class MeongCloud(context: Context) : MainAPI() {
         sources.flatMapIndexed { index, source ->
             source.mainPage.mapIndexed { category, original ->
                 MainPageData(
-                    "meong:$index:$category",
                     "${source.name} — ${original.name}",
+                    "meong:$index:$category",
                     original.horizontalImages
                 )
             }
