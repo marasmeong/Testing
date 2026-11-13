@@ -259,7 +259,7 @@ class Sokuja : MainAPI() {
 
                 val epUrl = fixUrl("/$slug/")
                 newEpisode("$epUrl::$epId") {
-                    this.name = epTitle
+                    this.name = "Episode $epNum"
                     this.episode = epNum
                 }
             }.distinctBy { it.data }.sortedBy { it.episode }
@@ -272,7 +272,7 @@ class Sokuja : MainAPI() {
                     ?: Regex("""-episode-(\d+)-""").find(href)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
                 newEpisode(href) {
-                    this.name = epText
+                    this.name = epNum?.let { "Episode $it" } ?: epText
                     this.episode = epNum
                 }
             }.distinctBy { it.data }.sortedBy { it.episode }
