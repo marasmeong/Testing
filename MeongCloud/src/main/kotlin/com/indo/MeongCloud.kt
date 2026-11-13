@@ -91,16 +91,14 @@ class MeongCloud(context: Context) : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> = coroutineScope {
-        sources.map { source ->
+        sources.filterNot { it is CloudBHADOO }.map { source ->
             async {
                 try {
                     val results = source.search(query) ?: emptyList<SearchResponse>()
-
                     android.util.Log.d(
                         "MeongCloudSearch",
                         "${source.name}: ${results.size} hasil"
                     )
-
                     results
                 } catch (e: Exception) {
                     android.util.Log.e(
