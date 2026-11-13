@@ -137,7 +137,7 @@ internal class OtakudesuTmdb(
                 .distinctBy {
                     "${it.optString("media_type")}:${it.optInt("id")}"
                 }
-                .take(12)
+                .take(30)
 
             fun normalize(value: String): String =
                 value.lowercase().replace(Regex("[^a-z0-9]"), "")
@@ -181,20 +181,38 @@ internal class OtakudesuTmdb(
                     item.optString("original_title")
                 )
 
-                val id = item.optInt("id")
-                if (id > 0) {
-                    try {
-                        val alt = request("$type/$id/alternative_titles")
-                        val entries = alt.optJSONArray(
-                            if (type == "tv") "results" else "titles"
-                        )
-                        for (i in 0 until (entries?.length() ?: 0)) {
-                            names.add(
-                                entries?.optJSONObject(i)
-                                    ?.optString("title").orEmpty()
+                // Cek judul utama sebelum meminta alternatif TMDB.
+                val directMatch = names.any { candidate ->
+                    val (base, season) = seasonInfo(candidate)
+                    val sameBase = sourceBase.isNotBlank() &&
+                        base.isNotBlank() &&
+                        (sourceBase == base ||
+                         (sourceBase.length >= 5 &&
+                          base.length >= 5 &&
+                          (sourceBase.contains(base) ||
+                           base.contains(sourceBase))))
+
+                    sameBase &&
+                        (sourceSeason == null || season == null ||
+                         sourceSeason == season)
+                }
+
+                if (!directMatch) {
+                    val id = item.optInt("id")
+                    if (id > 0) {
+                        try {
+                            val alt = request("$type/$id/alternative_titles")
+                            val entries = alt.optJSONArray(
+                                if (type == "tv") "results" else "titles"
                             )
-                        }
-                    } catch (_: Exception) {}
+                            for (i in 0 until (entries?.length() ?: 0)) {
+                                names.add(
+                                    entries?.optJSONObject(i)
+                                        ?.optString("title").orEmpty()
+                                )
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
 
                 val titleScore = names.maxOfOrNull { candidate ->
