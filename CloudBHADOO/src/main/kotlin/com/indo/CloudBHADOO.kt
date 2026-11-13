@@ -242,7 +242,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
     private suspend fun getTmdbMovie(filename: String): TmdbMovie? {
         val token = getTmdbToken()
         if (token.isBlank()) {
-            android.util.Log.d("CloudBHADOO", "TMDB token belum diatur")
             return null
         }
 
@@ -318,10 +317,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                     ?: detailEn?.optString("overview").orEmpty()
             }
 
-            android.util.Log.d(
-                "CloudBHADOO",
-                "TMDB overview: type=$kind id=$id length=${overview.length}"
-            )
 
             val genres = mutableListOf<String>()
             val genreArray = detailId.optJSONArray("genres")
@@ -371,26 +366,57 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
             tmdbCache[cacheKey] = result
 
-            android.util.Log.d(
-                "CloudBHADOO",
-                "TMDB sukses: type=$kind id=$id season=${media.season} episode=${media.episode} still=${poster != null}"
-            )
 
             result
         } catch (e: Exception) {
-            android.util.Log.e(
-                "CloudBHADOO",
-                "TMDB gagal: ${e.javaClass.simpleName}"
-            )
             null
         }
+    }
+
+
+    private fun detectQuality(filename: String): String {
+        val clean = filename.substringBeforeLast(".")
+            .replace('.', ' ')
+            .replace('_', ' ')
+
+        val hc = Regex("""(?i)\bHC\b""")
+            .containsMatchIn(clean)
+
+        val quality = when {
+            Regex("""(?i)\bWEB[- ]?DL\b""")
+                .containsMatchIn(clean) -> "WEB-DL"
+
+            Regex("""(?i)\bWEB[ -]?Rip\b""")
+                .containsMatchIn(clean) -> "WEBRip"
+
+            Regex("""(?i)\bBlu[ -]?Ray\b""")
+                .containsMatchIn(clean) -> "Blu-Ray"
+
+            Regex("""(?i)\bHD[ -]?Rip\b""")
+                .containsMatchIn(clean) -> "HDRip"
+
+            else -> ""
+        }
+
+        return if (quality.isNotEmpty() && hc)
+            "HC $quality"
+        else quality
+    }
+
+    private fun displayTitleWithQuality(filename: String): String {
+        val title = parseMedia(filename).displayTitle
+        val quality = detectQuality(filename)
+
+        return if (quality.isBlank())
+            title
+        else "$title $quality"
     }
 
     private suspend fun toSearchResponse(file: VideoFile): SearchResponse {
         val metadata = getTmdbMovie(file.name)
 
         return newMovieSearchResponse(
-            parseMedia(file.name).displayTitle,
+            displayTitleWithQuality(file.name),
             fileUrl(file.name, file.id),
             TvType.Movie
         ) {
@@ -449,7 +475,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                     )
                 }
             } catch (e: Exception) {
-                println("CloudBHADOO folder ${folder.name}: ${e.message}")
             }
         }
 
@@ -627,18 +652,9 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.w(
-                    "CloudBHADOO",
-                    "Subsource query failed: $query",
-                    e
-                )
             }
         }
 
-        android.util.Log.i(
-            "CloudBHADOO",
-            "Subsource: $title ($year) -> $bestId score=$bestScore"
-        )
 
         return if (bestScore >= 55) bestId else null
     }
@@ -666,11 +682,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                     headers = mapOf("X-API-Key" to key)
                 )
             } catch (e: Exception) {
-                android.util.Log.w(
-                    "CloudBHADOO",
-                    "Subsource subtitles page $page failed",
-                    e
-                )
                 break
             }
 
@@ -810,9 +821,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                                         }
                                         output.flush()
                                     } catch (e: Exception) {
-                                        android.util.Log.w(
-                                            "CloudBHADOO", "Subtitle HTTP error", e
-                                        )
                                     }
                                 }
                             }.apply {
@@ -820,9 +828,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                                 start()
                             }
                         } catch (e: Exception) {
-                            android.util.Log.w(
-                                "CloudBHADOO", "Subtitle server stopped", e
-                            )
                             break
                         }
                     }
@@ -894,10 +899,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                             }
                         }
 
-                        android.util.Log.i(
-                            "CloudBHADOO",
-                            "Subsource SRT downloaded: ${file.name}, size=${file.length()} bytes"
-                        )
                         if (!file.exists() || file.length() == 0L) {
                             throw java.io.IOException("Extracted SRT is empty")
                         }
@@ -994,7 +995,6 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.w("CloudBHADOO", "Subtitle detection failed", e)
         }
 
         try {
@@ -1019,20 +1019,10 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
                             )
                         )
                     } catch (e: Exception) {
-                        android.util.Log.w(
-                            "CloudBHADOO",
-                            "Subtitle ${choice.id} failed",
-                            e
-                        )
                     }
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.w(
-                "CloudBHADOO",
-                "Subsource subtitle failed",
-                e
-            )
         }
 
         return true
