@@ -190,8 +190,7 @@ class AnimeXin : MainAPI() {
                 ?.value?.toIntOrNull()
 
             newEpisode(episodeUrl) {
-                this.name = episodeTitle
-                    ?: episodeNumber?.let { "Episode $it" }
+                this.name = episodeNumber?.let { "Episode $it" } ?: episodeTitle
                     ?: "Episode"
                 this.episode = episodeNumber
             }
@@ -204,11 +203,13 @@ class AnimeXin : MainAPI() {
         } else if (seriesUrl != requestedUrl) {
             listOf(
                 newEpisode(requestedUrl) {
-                    this.name = requestedDoc.selectFirst("h1.entry-title")
+                    val originalName = requestedDoc.selectFirst("h1.entry-title")
                         ?.text()?.trim() ?: "Episode"
-                    this.episode = Regex("""Episode\s*(\d+)""")
-                        .find(this.name.orEmpty())
+                    val epNum = Regex("""Episode\\s*(\\d+)""", RegexOption.IGNORE_CASE)
+                        .find(originalName)
                         ?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    this.name = epNum?.let { "Episode $it" } ?: originalName
+                    this.episode = epNum
                 }
             )
         } else {

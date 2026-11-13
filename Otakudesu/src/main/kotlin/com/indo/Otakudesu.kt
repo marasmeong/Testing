@@ -86,7 +86,7 @@ class Otakudesu : MainAPI() {
             val href = a.attr("href").ifBlank { null } ?: return@mapNotNull null
             val name = a.text().trim().ifBlank { null } ?: return@mapNotNull null
             val ep = Regex("Episode\\s?(\\d+)", RegexOption.IGNORE_CASE).find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            newEpisode(href) { this.name = name; this.episode = ep }
+            newEpisode(href) { this.name = ep?.let { "Episode $it" } ?: name; this.episode = ep }
         }?.reversed() ?: emptyList()
 
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(TvType.Anime), year, true)

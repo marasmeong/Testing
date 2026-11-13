@@ -144,7 +144,7 @@ class Anichin : MainAPI() {
                 val numText = a.selectFirst(".epl-num")?.text()?.trim() ?: ""
                 val epNum = Regex("""\d+""").find(numText)?.value?.toIntOrNull()
                 newEpisode(epHref) {
-                    this.name = epTitle ?: (if (epNum != null) "Episode $epNum" else numText.ifBlank { "Episode" })
+                    this.name = epNum?.let { "Episode $it" } ?: epTitle ?: "Episode"
                     this.episode = epNum
                 }
             }
@@ -159,7 +159,7 @@ class Anichin : MainAPI() {
                 val epNum = Regex("""(?:Eps?|Episode)\s*(\d+)""", RegexOption.IGNORE_CASE).find(epInfo)?.groupValues?.getOrNull(1)?.toIntOrNull()
                     ?: Regex("""(?:Eps?|Episode)\s*(\d+)""", RegexOption.IGNORE_CASE).find(epTitle ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
                 newEpisode(epHref) {
-                    this.name = epTitle ?: "Episode ${epNum ?: ""}"
+                    this.name = epNum?.let { "Episode $it" } ?: epTitle ?: "Episode"
                     this.episode = epNum
                 }
             }
@@ -189,7 +189,7 @@ class Anichin : MainAPI() {
                     val numText = a.selectFirst(".epl-num")?.text()?.trim() ?: ""
                     val epNum = Regex("""\d+""").find(numText)?.value?.toIntOrNull()
                     newEpisode(epHref) {
-                        this.name = epTitle ?: (if (epNum != null) "Episode $epNum" else numText.ifBlank { "Episode" })
+                        this.name = epNum?.let { "Episode $it" } ?: epTitle ?: "Episode"
                         this.episode = epNum
                     }
                 }
