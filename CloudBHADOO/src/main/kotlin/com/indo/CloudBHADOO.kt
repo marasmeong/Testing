@@ -177,7 +177,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
             ).trim()
 
             val episodeTitle = remainder
-                .split(quality, limit = 2)
+                .split(Regex("""(?i)\b(?:Blu[ -]?Ray|WEB[- ]?DL|WEB[ -]?Rip|HD[ -]?Rip|BRRip|DVDRip|HDTV|2160p|1080p|720p|480p|x264|x265|HEVC|H264|H265)\b"""), limit = 2)
                 .first()
                 .trim(' ', '-', '.')
 
@@ -490,7 +490,7 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         val fallbackPoster = "$mainUrl/1:/Gambar/logodua.jpg"
 
         return newMovieLoadResponse(
-            parseMedia(filename).displayTitle,
+            displayTitleWithQuality(filename),
             url,
             TvType.Movie,
             url
