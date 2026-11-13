@@ -59,9 +59,11 @@ class MeongCloud(context: Context) : MainAPI() {
     ): HomePageResponse {
         val parts = request.data.split(":")
         val sourceIndex = parts.getOrNull(1)?.toIntOrNull()
-            ?: throw ErrorLoadingException("Sumber tidak valid")
         val categoryIndex = parts.getOrNull(2)?.toIntOrNull()
-            ?: throw ErrorLoadingException("Kategori tidak valid")
+
+        if (sourceIndex == null || categoryIndex == null) {
+            return newHomePageResponse(emptyList())
+        }
 
         val source = sources.getOrNull(sourceIndex)
             ?: throw ErrorLoadingException("Sumber tidak ditemukan")
