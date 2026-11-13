@@ -92,7 +92,25 @@ class MeongCloud(context: Context) : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> = coroutineScope {
         sources.map { source ->
-            async { try { source.search(query) ?: emptyList<SearchResponse>() } catch (_: Exception) { emptyList<SearchResponse>() } }
+            async {
+                try {
+                    val results = source.search(query) ?: emptyList<SearchResponse>()
+
+                    android.util.Log.d(
+                        "MeongCloudSearch",
+                        "${source.name}: ${results.size} hasil"
+                    )
+
+                    results
+                } catch (e: Exception) {
+                    android.util.Log.e(
+                        "MeongCloudSearch",
+                        "${source.name}: pencarian gagal",
+                        e
+                    )
+                    emptyList<SearchResponse>()
+                }
+            }
         }.awaitAll().flatten().distinctBy { it.url }
     }
 
