@@ -218,8 +218,22 @@ class Sokuja : MainAPI() {
 
         val poster = doc.selectFirst("meta[property=og:image]")?.attr("content")?.ifBlank { null }
             ?: doc.selectFirst("img.object-cover, div[class*='aspect-'] img, img[alt]")?.let { extractPoster(it) }
-        val description = doc.selectFirst("div.rounded-xl p, p.synopsis")?.text()?.trim()
-            ?: doc.selectFirst("meta[name=description]")?.attr("content")
+        val synopsisHeading = doc.select("h2")
+            .firstOrNull {
+                it.text().trim().startsWith("Sinopsis ", ignoreCase = true)
+            }
+
+        val description = synopsisHeading
+            ?.parent()
+            ?.select("div.prose > p")
+            ?.map { it.text().trim() }
+            ?.filter {
+                it.isNotBlank() &&
+                !it.startsWith("Series Lain", ignoreCase = true)
+            }
+            ?.joinToString("\\n\\n")
+            ?.takeIf { it.isNotBlank() }
+            ?: "Sinopsis belum tersedia."
 
         val genres = doc.select("a[href*='/genre/']").map { it.text().trim() }
             .filter { it.isNotBlank() }.distinct()
