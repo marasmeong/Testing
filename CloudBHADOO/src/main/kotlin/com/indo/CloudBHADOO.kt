@@ -403,13 +403,20 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
         else quality
     }
 
-    private fun displayTitleWithQuality(filename: String): String {
-        val title = parseMedia(filename).displayTitle
-        val quality = detectQuality(filename)
 
-        return if (quality.isBlank())
-            title
-        else "$title $quality"
+    private fun displayTitleWithQuality(filename: String): String {
+        val media = parseMedia(filename)
+        val title = media.displayTitle
+
+        if (media.isEpisode) {
+            return title.replace(
+                Regex("""(?i)\\s+(?:HC\\s+)?(?:Blu[ -]?Ray|WEB[- ]?DL|WEB[ -]?Rip|HD[ -]?Rip|BRRip|DVDRip|HDTV)(?=\\s|$).*"""),
+                ""
+            ).trim()
+        }
+
+        val quality = detectQuality(filename)
+        return if (quality.isBlank()) title else "$title $quality"
     }
 
     private suspend fun toSearchResponse(file: VideoFile): SearchResponse {
