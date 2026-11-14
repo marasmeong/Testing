@@ -25,3 +25,10 @@ build/
 .gradle/
 *.cs3
 *.bak
+
+# Ignore local backups
+*.bak
+*.bak-*
+*.episode-backup
+*.backup
+*.backup-*

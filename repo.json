@@ -1,8 +1,8 @@
 {
-    "name": "Nonton Indo",
-    "description": "CloudStream 3 extensions untuk situs streaming Indonesia",
-    "manifestVersion": 1,
-    "pluginLists": [
-        "https://raw.githubusercontent.com/marasaklun90-dotcom/meong/builds/plugins.json"
-    ]
+  "name": "Meong",
+  "description": "Meong CloudStream Extensions",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/marasmeong/meong/builds/plugins.json"
+  ]
 }

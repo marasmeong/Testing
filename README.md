@@ -1,3 +1,3 @@
 ```text
-https://raw.githubusercontent.com/marasaklun90-dotcom/meong/builds/repo.json
+https://raw.githubusercontent.com/marasmeong/meong/builds/repo.json
 ```

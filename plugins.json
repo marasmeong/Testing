@@ -1,28 +1,8 @@
 [
   {
-    "iconUrl": "https://www.google.com/s2/favicons?domain=https://anime-indo.lol&sz=%size%",
-    "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
-    "fileSize": 0,
-    "status": 1,
-    "language": "id",
-    "authors": [
-      "meong"
-    ],
-    "tvTypes": [
-      "Anime",
-      "AnimeMovie",
-      "OVA"
-    ],
-    "version": 2,
-    "internalName": "AnimeIndo",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/AnimeIndo.cs3",
-    "name": "AnimeIndo"
-  },
-  {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://oploverz.ch&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -36,13 +16,13 @@
     ],
     "version": 2,
     "internalName": "Oploverz",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Oploverz.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Oploverz.cs3",
     "name": "Oploverz"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://otakudesu.blog&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -56,13 +36,13 @@
     ],
     "version": 1,
     "internalName": "Otakudesu",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Otakudesu.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Otakudesu.cs3",
     "name": "Otakudesu"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://nimegami.id&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -76,13 +56,13 @@
     ],
     "version": 1,
     "internalName": "Nimegami",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Nimegami.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Nimegami.cs3",
     "name": "Nimegami"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://animasuid.com&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -96,13 +76,13 @@
     ],
     "version": 2,
     "internalName": "Animasu",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Animasu.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Animasu.cs3",
     "name": "Animasu"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://pahe.ink&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -115,13 +95,13 @@
     ],
     "version": 3,
     "internalName": "Pahe",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Pahe.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Pahe.cs3",
     "name": "Pahe"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=http://159.89.250.250&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -134,13 +114,13 @@
     ],
     "version": 1,
     "internalName": "Rebahin",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Rebahin.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Rebahin.cs3",
     "name": "Rebahin"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://nekopoi.care&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -153,13 +133,13 @@
     ],
     "version": 1,
     "internalName": "Nekopoi",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Nekopoi.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Nekopoi.cs3",
     "name": "Nekopoi"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=http://167.71.237.49&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -171,13 +151,13 @@
     ],
     "version": 1,
     "internalName": "SemiRebahin",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/SemiRebahin.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/SemiRebahin.cs3",
     "name": "SemiRebahin"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://hanime.tv&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "en",
@@ -189,13 +169,13 @@
     ],
     "version": 1,
     "internalName": "Hanime",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Hanime.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Hanime.cs3",
     "name": "Hanime"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://x6.sokuja.uk&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -209,13 +189,13 @@
     ],
     "version": 4,
     "internalName": "Sokuja",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Sokuja.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Sokuja.cs3",
     "name": "Sokuja"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://anichin.moe&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -228,13 +208,13 @@
     ],
     "version": 2,
     "internalName": "Anichin",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Anichin.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Anichin.cs3",
     "name": "Anichin"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://v20.kuramanime.ing&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -248,13 +228,13 @@
     ],
     "version": 5,
     "internalName": "Kuramanime",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Kuramanime.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Kuramanime.cs3",
     "name": "Kuramanime"
   },
   {
     "iconUrl": "https://www.google.com/s2/favicons?domain=https://kuronime.sbs&sz=%size%",
     "apiVersion": 1,
-    "repositoryUrl": "https://github.com/marasaklun90-dotcom/meong",
+    "repositoryUrl": "https://github.com/marasmeong/meong",
     "fileSize": 0,
     "status": 1,
     "language": "id",
@@ -268,7 +248,7 @@
     ],
     "version": 2,
     "internalName": "Kuronime",
-    "url": "https://github.com/marasaklun90-dotcom/meong/raw/main/build/Kuronime.cs3",
+    "url": "https://raw.githubusercontent.com/marasmeong/meong/builds/Kuronime.cs3",
     "name": "Kuronime"
   }
 ]
