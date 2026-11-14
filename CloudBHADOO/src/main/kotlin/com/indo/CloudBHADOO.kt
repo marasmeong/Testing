@@ -271,18 +271,90 @@ class CloudBHADOO(private val context: android.content.Context) : MainAPI() {
 
         return try {
             val kind = if (media.isEpisode) "tv" else "movie"
-            val query = URLEncoder.encode(media.query, "UTF-8")
-            val yearParam = media.year?.let {
-                if (kind == "movie") "&year=$it" else ""
-            }.orEmpty()
+            fun normalize(value: String): String =
+                value.lowercase(java.util.Locale.ROOT)
+                    .replace(Regex("""[^a-z0-9 ]"""), " ")
+                    .replace(Regex("""\\s+"""), " ")
+                    .trim()
 
-            val search = fetch(
-                "search/$kind?query=$query$yearParam",
-                "en-US"
+            val original = normalize(media.query)
+            val words = original.split(" ").filter { it.isNotBlank() }
+            val extras = setOf(
+                "encore", "extended", "remastered", "repack",
+                "proper", "uncut", "edition", "version"
             )
 
-            val results = search.optJSONArray("results") ?: return null
-            val candidate = results.optJSONObject(0) ?: return null
+            val cleaned = words.filterNot { it in extras }
+                .joinToString(" ")
+
+            val queries = linkedSetOf<String>()
+            queries.add(original)
+            queries.add(cleaned)
+
+            if (words.size > 2) {
+                queries.add(words.dropLast(1).joinToString(" "))
+            }
+
+            if (cleaned.split(" ").size > 2) {
+                queries.add(cleaned.split(" ").dropLast(1).joinToString(" "))
+            }
+
+            if (words.size >= 2) {
+                queries.add(words.take(2).joinToString(" "))
+            }
+
+            if (words.isNotEmpty()) queries.add(words.first())
+
+            fun similarity(a: String, b: String): Double {
+                val aa = normalize(a).split(" ").filter { it.isNotBlank() }.toSet()
+                val bb = normalize(b).split(" ").filter { it.isNotBlank() }.toSet()
+                if (aa.isEmpty() || bb.isEmpty()) return 0.0
+                return 2.0 * aa.intersect(bb).size / (aa.size + bb.size)
+            }
+
+            var best: org.json.JSONObject? = null
+            var bestScore = 0.0
+
+            for (q in queries.filter { it.isNotBlank() }.take(6)) {
+                val encoded = URLEncoder.encode(q, "UTF-8")
+                val search = fetch("search/$kind?query=$encoded", "en-US")
+                val results = search.optJSONArray("results") ?: continue
+
+                for (i in 0 until minOf(results.length(), 10)) {
+                    val item = results.optJSONObject(i) ?: continue
+                    val name = item.optString(
+                        if (kind == "movie") "title" else "name"
+                    )
+                    val originalName = item.optString(
+                        if (kind == "movie") "original_title" else "original_name"
+                    )
+
+                    val titleScore = maxOf(
+                        similarity(cleaned, name),
+                        similarity(cleaned, originalName)
+                    )
+
+                    val date = item.optString(
+                        if (kind == "movie") "release_date" else "first_air_date"
+                    )
+                    val resultYear = date.take(4).toIntOrNull()
+                    val yearBonus = if (
+                        media.year != null && resultYear == media.year
+                    ) 0.08 else 0.0
+
+                    val score = titleScore + yearBonus
+
+                    if (score > bestScore) {
+                        bestScore = score
+                        best = item
+                    }
+                }
+
+                if (bestScore >= 1.0) break
+            }
+
+            val candidate = best?.takeIf { bestScore >= 0.72 }
+                ?: return null
             val id = candidate.optInt("id")
             if (id <= 0) return null
 
