@@ -1,0 +1,122 @@
+[
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://anichin.moe&sz=%size%",
+        "fileHash": "sha256-ee2b4d61574e7a4e9429ee2f059cd3e1b6112c813fb7c74015613e38fb6a2002",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/marasmeong/Testing",
+        "fileSize": 36368,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "meong"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie"
+        ],
+        "version": 1,
+        "internalName": "Anichin",
+        "url": "https://raw.githubusercontent.com/marasmeong/Testing/builds/Anichin.cs3",
+        "name": "Anichin"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://animexin.dev&sz=%size%",
+        "fileHash": "sha256-8d98be041c85a4d0cbbad4d11cce809cba96b429e4faa9a2c8dd7553a7c97f4a",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/marasmeong/Testing",
+        "fileSize": 29427,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "meong"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie"
+        ],
+        "version": 1,
+        "internalName": "AnimeXin",
+        "url": "https://raw.githubusercontent.com/marasmeong/Testing/builds/AnimeXin.cs3",
+        "name": "AnimeXin"
+    },
+    {
+        "iconUrl": "https://naza.meong.workers.dev/1:/Gambar/Favicontiga.png",
+        "fileHash": "sha256-5aa926374430fecd7a52d6ebb7161232ad3f3695b1870e7c654721e9a61d801a",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/marasmeong/Testing",
+        "fileSize": 48395,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "meong"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "CloudBHADOO",
+        "url": "https://raw.githubusercontent.com/marasmeong/Testing/builds/CloudBHADOO.cs3",
+        "name": "CloudBHADOO"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://otakudesu.blog&sz=%size%",
+        "fileHash": "sha256-343a438515c2b58c049ad42e7ce0551f573f2ee9ae22922780dd961f71d41248",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/marasmeong/Testing",
+        "fileSize": 42429,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "meong"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "version": 1,
+        "internalName": "Otakudesu",
+        "url": "https://raw.githubusercontent.com/marasmeong/Testing/builds/Otakudesu.cs3",
+        "name": "Otakudesu"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=seedmivo.st&sz=%size%",
+        "fileHash": "sha256-37e2d65bc18194854442eab08e31afebab95244553ec644b7c8e490ac1e89484",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/marasmeong/Testing",
+        "fileSize": 9389,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "meong"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "SeedMivo",
+        "url": "https://raw.githubusercontent.com/marasmeong/Testing/builds/SeedMivo.cs3",
+        "name": "SeedMivo"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://x6.sokuja.uk&sz=%size%",
+        "fileHash": "sha256-f7c5af911c8f027067d6e3dddfa440c0ce89eb4a189171d3e7e82c1944a6f66a",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/marasmeong/Testing",
+        "fileSize": 26071,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "meong"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "version": 1,
+        "internalName": "Sokuja",
+        "url": "https://raw.githubusercontent.com/marasmeong/Testing/builds/Sokuja.cs3",
+        "name": "Sokuja"
+    }
+]
